@@ -1,0 +1,24 @@
+# Local environment and generated caches
+.env
+.env.*
+!.env.example
+.tmp-*
+
+# Go
+*.exe
+*.test
+*.out
+
+# Node / Next.js
+web/node_modules/
+web/.next/
+web/out/
+web/coverage/
+npm-debug.log*
+
+# IDE and OS files
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db

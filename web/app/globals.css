@@ -1,0 +1,19 @@
+:root { color-scheme: dark; font-family: Inter, ui-sans-serif, system-ui, sans-serif; background: #0b1020; color: #e5e7eb; }
+* { box-sizing: border-box; }
+body { margin: 0; background: linear-gradient(140deg, #111827, #0b1020 55%); min-height: 100vh; }
+a { color: #93c5fd; text-decoration: none; }
+.app-header { display: flex; align-items: baseline; gap: 16px; padding: 24px 40px; border-bottom: 1px solid #253047; }
+.brand { font-size: 22px; font-weight: 700; letter-spacing: -0.03em; }
+.subtitle { color: #94a3b8; font-size: 13px; }
+.app-main { max-width: 1440px; margin: 0 auto; padding: 40px; }
+.page-title { margin: 0 0 8px; font-size: 30px; }
+.page-description { color: #94a3b8; margin: 0 0 28px; }
+.panel { overflow: auto; border: 1px solid #263550; border-radius: 12px; background: #111827cc; }
+.trace-table { width: 100%; border-collapse: collapse; min-width: 900px; }
+.trace-table th, .trace-table td { padding: 16px; text-align: left; border-bottom: 1px solid #253047; font-size: 14px; }
+.trace-table th { color: #94a3b8; font-weight: 500; }
+.empty-state, .error-state { border: 1px dashed #3a4b69; border-radius: 12px; padding: 48px; color: #94a3b8; text-align: center; }
+.empty-state strong { color: #e5e7eb; display: block; margin-bottom: 8px; }
+.span-tree { list-style: none; margin: 0; padding: 0 0 0 24px; border-left: 1px solid #334155; }
+.span-node { display: flex; gap: 14px; align-items: center; padding: 12px; margin: 8px 0; border: 1px solid #263550; border-radius: 8px; background: #172033; }
+.span-node span { color: #94a3b8; font-size: 12px; }
