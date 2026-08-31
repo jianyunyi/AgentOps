@@ -35,6 +35,29 @@ func (h *Handler) Login(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"data": gin.H{"user_id": session.UserID, "tenant_id": session.TenantID}})
 }
 
+func (h *Handler) Register(c *gin.Context) {
+	var request struct {
+		TenantName string `json:"tenant_name"`
+		Email      string `json:"email"`
+		Password   string `json:"password"`
+	}
+	if err := c.ShouldBindJSON(&request); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_REQUEST", "message": "tenant name, email and password are required"}})
+		return
+	}
+	session, err := h.service.Register(c.Request.Context(), request.TenantName, request.Email, request.Password)
+	if err != nil {
+		status := http.StatusBadRequest
+		if !errors.Is(err, ErrInvalidRegistration) {
+			status = http.StatusConflict
+		}
+		c.JSON(status, gin.H{"error": gin.H{"code": "REGISTRATION_FAILED", "message": "registration could not be completed"}})
+		return
+	}
+	c.SetCookie("agentscope_session", session.ID, int(timeUntil(session.ExpiresAt)), "/", "", true, true)
+	c.JSON(http.StatusCreated, gin.H{"data": gin.H{"user_id": session.UserID, "tenant_id": session.TenantID, "role": session.Role}})
+}
+
 func (h *Handler) Authenticate(c *gin.Context) {
 	sessionID, err := c.Cookie("agentscope_session")
 	if err != nil || strings.TrimSpace(sessionID) == "" {

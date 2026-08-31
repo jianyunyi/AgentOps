@@ -94,6 +94,31 @@ func (s *Service) AuthenticateAPIKey(ctx context.Context, rawKey string) (Identi
 	return Identity{TenantID: credential.TenantID, AgentID: credential.AgentID}, nil
 }
 
+func (s *Service) RotateAPIKey(ctx context.Context, tenantID, agentID string) (CreateAgentResult, error) {
+	if tenantID == "" || agentID == "" {
+		return CreateAgentResult{}, errors.New("tenant and agent are required")
+	}
+	if err := s.repo.RevokeCredentials(ctx, tenantID, agentID); err != nil {
+		return CreateAgentResult{}, err
+	}
+	rawKey, err := randomKey()
+	if err != nil {
+		return CreateAgentResult{}, err
+	}
+	credential := &AgentCredential{ID: mustRandomID("cred_"), TenantID: tenantID, AgentID: agentID, KeyPrefix: rawKey[:min(16, len(rawKey))], KeyHash: hashKey(rawKey), Status: CredentialActive, CreatedAt: time.Now().UTC()}
+	if err := s.repo.CreateCredential(ctx, credential); err != nil {
+		return CreateAgentResult{}, err
+	}
+	return CreateAgentResult{Agent: Agent{ID: agentID, TenantID: tenantID}, RawAPIKey: rawKey}, nil
+}
+
+func (s *Service) RevokeAPIKey(ctx context.Context, tenantID, agentID string) error {
+	if tenantID == "" || agentID == "" {
+		return errors.New("tenant and agent are required")
+	}
+	return s.repo.RevokeCredentials(ctx, tenantID, agentID)
+}
+
 func randomKey() (string, error) {
 	return randomToken("ag_live_", 24)
 }

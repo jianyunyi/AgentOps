@@ -19,6 +19,9 @@ func NewApplicationRouter(authService *auth.Service, agentService *agent.Service
 	console.Use(authHandler.Authenticate)
 	console.POST("/agents", auth.RequirePermission(auth.PermissionAgentWrite), agentHandler.Create)
 	console.GET("/agents", auth.RequirePermission(auth.PermissionAgentRead), agentHandler.List)
+	console.POST("/agents/:id/rotate-key", auth.RequirePermission(auth.PermissionAgentWrite), agentHandler.RotateKey)
+	console.POST("/agents/:id/revoke-key", auth.RequirePermission(auth.PermissionAgentWrite), agentHandler.RevokeKey)
 	router.POST("/api/v1/auth/login", authHandler.Login)
+	router.POST("/api/v1/auth/register", authHandler.Register)
 	return router
 }

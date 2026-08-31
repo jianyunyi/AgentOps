@@ -6,8 +6,9 @@ import (
 )
 
 type fakeRepository struct {
-	agent      *Agent
-	credential *AgentCredential
+	agent       *Agent
+	credential  *AgentCredential
+	credentials []*AgentCredential
 }
 
 func (f *fakeRepository) CreateAgent(_ context.Context, agent *Agent) error {
@@ -16,7 +17,12 @@ func (f *fakeRepository) CreateAgent(_ context.Context, agent *Agent) error {
 }
 
 func (f *fakeRepository) CreateCredential(_ context.Context, credential *AgentCredential) error {
-	f.credential = credential
+	if f.credential == nil {
+		f.credential = credential
+	} else {
+		f.credentials = append(f.credentials, f.credential)
+		f.credential = credential
+	}
 	return nil
 }
 
@@ -32,6 +38,18 @@ func (f *fakeRepository) ListAgents(_ context.Context, tenantID string) ([]Agent
 		return []Agent{*f.agent}, nil
 	}
 	return []Agent{}, nil
+}
+
+func (f *fakeRepository) RevokeCredentials(_ context.Context, tenantID, agentID string) error {
+	if f.credential != nil && f.credential.TenantID == tenantID && f.credential.AgentID == agentID {
+		f.credential.Status = CredentialRevoked
+	}
+	for _, credential := range f.credentials {
+		if credential.TenantID == tenantID && credential.AgentID == agentID {
+			credential.Status = CredentialRevoked
+		}
+	}
+	return nil
 }
 
 func TestCreateAgentReturnsRawKeyOnceAndPersistsOnlyHash(t *testing.T) {
@@ -82,5 +100,24 @@ func TestAuthenticateAPIKeyRejectsUnknownKey(t *testing.T) {
 	svc := NewService(&fakeRepository{})
 	if _, err := svc.AuthenticateAPIKey(context.Background(), "ag_live_unknown"); err == nil {
 		t.Fatal("AuthenticateAPIKey() should reject an unknown key")
+	}
+}
+
+func TestRotateAPIKeyRevokesPreviousCredential(t *testing.T) {
+	repo := &fakeRepository{}
+	svc := NewService(repo)
+	created, err := svc.CreateAgent(context.Background(), CreateAgentInput{TenantID: "tenant_001", Name: "Ops", Environment: "production"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rotated, err := svc.RotateAPIKey(context.Background(), "tenant_001", created.Agent.ID)
+	if err != nil {
+		t.Fatalf("RotateAPIKey() error = %v", err)
+	}
+	if rotated.RawAPIKey == "" || rotated.RawAPIKey == created.RawAPIKey {
+		t.Fatal("rotation must return a new raw key")
+	}
+	if len(repo.credentials) != 1 || repo.credentials[0].Status != CredentialRevoked {
+		t.Fatal("rotation must revoke the old credential")
 	}
 }

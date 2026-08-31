@@ -36,3 +36,12 @@ export interface Paginated<T> {
   data: T[];
   pagination: { page: number; page_size: number; total: number };
 }
+
+export interface Agent {
+  id: string;
+  tenantId: string;
+  name: string;
+  description: string;
+  environment: string;
+  status: string;
+}

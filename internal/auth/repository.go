@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 
+	"agentscope/internal/tenant"
 	"gorm.io/gorm"
 )
 
@@ -16,6 +17,7 @@ type Repository interface {
 	FindByEmail(ctx context.Context, email string) (*User, error)
 	CreateSession(ctx context.Context, session *Session) error
 	FindSession(ctx context.Context, sessionID string) (*Session, error)
+	RegisterTenantOwner(ctx context.Context, tenantName string, user *User) (string, error)
 }
 
 type GORMRepository struct{ db *gorm.DB }
@@ -46,4 +48,19 @@ func (r *GORMRepository) FindSession(ctx context.Context, sessionID string) (*Se
 		return nil, err
 	}
 	return &session, nil
+}
+
+func (r *GORMRepository) RegisterTenantOwner(ctx context.Context, tenantName string, user *User) (string, error) {
+	tenantRecord := tenant.Tenant{ID: "ten_" + user.ID[4:], Name: tenantName, Status: "active", CreatedAt: timeNow(), UpdatedAt: timeNow()}
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(&tenantRecord).Error; err != nil {
+			return err
+		}
+		user.TenantID = tenantRecord.ID
+		return tx.Create(user).Error
+	})
+	if err != nil {
+		return "", err
+	}
+	return tenantRecord.ID, nil
 }

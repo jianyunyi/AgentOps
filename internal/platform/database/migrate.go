@@ -2,7 +2,10 @@ package database
 
 import (
 	"agentscope/internal/agent"
+	"agentscope/internal/audit"
+	"agentscope/internal/outbox"
 	"agentscope/internal/auth"
+	"agentscope/internal/tenant"
 	"agentscope/internal/trace"
 	"gorm.io/gorm"
 )
@@ -13,6 +16,9 @@ func Migrate(db *gorm.DB) error {
 		&agent.AgentCredential{},
 		&auth.User{},
 		&auth.Session{},
+		&tenant.Tenant{},
+		&audit.Record{},
+		&outbox.Event{},
 		&trace.Trace{},
 		&trace.Span{},
 		&trace.EventRecord{},

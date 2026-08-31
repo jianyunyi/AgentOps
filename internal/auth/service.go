@@ -12,6 +12,7 @@ import (
 )
 
 var ErrInvalidCredentials = errors.New("invalid credentials")
+var ErrInvalidRegistration = errors.New("invalid registration")
 
 type Service struct {
 	repo          Repository
@@ -52,6 +53,38 @@ func (s *Service) Login(ctx context.Context, email, password string) (*Session, 
 	return session, nil
 }
 
+func (s *Service) Register(ctx context.Context, tenantName, email, password string) (*Session, error) {
+	tenantName = strings.TrimSpace(tenantName)
+	email = strings.ToLower(strings.TrimSpace(email))
+	if tenantName == "" || email == "" {
+		return nil, ErrInvalidRegistration
+	}
+	hash, err := HashPassword(password)
+	if err != nil {
+		return nil, ErrInvalidRegistration
+	}
+	repo, ok := s.repo.(interface {
+		RegisterTenantOwner(context.Context, string, *User) (string, error)
+	})
+	if !ok {
+		return nil, errors.New("registration repository is not configured")
+	}
+	user := &User{ID: mustID("usr_"), Email: email, PasswordHash: hash, Role: RoleOwner, Status: UserActive}
+	tenantID, err := repo.RegisterTenantOwner(ctx, tenantName, user)
+	if err != nil {
+		return nil, err
+	}
+	sessionID, err := randomSessionID()
+	if err != nil {
+		return nil, err
+	}
+	session := &Session{ID: sessionID, UserID: user.ID, TenantID: tenantID, Role: user.Role, ExpiresAt: time.Now().UTC().Add(8 * time.Hour), CreatedAt: time.Now().UTC()}
+	if err := s.repo.CreateSession(ctx, session); err != nil {
+		return nil, err
+	}
+	return session, nil
+}
+
 func (s *Service) ResolveSession(ctx context.Context, sessionID string) (*Session, error) {
 	if strings.TrimSpace(sessionID) == "" {
 		return nil, ErrSessionNotFound
@@ -78,6 +111,14 @@ func randomSessionID() (string, error) {
 		return "", err
 	}
 	return "ses_" + hex.EncodeToString(buf), nil
+}
+
+func mustID(prefix string) string {
+	id, err := randomSessionID()
+	if err != nil {
+		panic(err)
+	}
+	return prefix + id[4:]
 }
 
 func timeNow() time.Time { return time.Now().UTC() }

@@ -46,3 +46,30 @@ func (h *Handler) List(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, gin.H{"data": agents})
 }
+
+func (h *Handler) RotateKey(c *gin.Context) {
+	tenantID, exists := c.Get("tenant_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": gin.H{"code": "UNAUTHENTICATED", "message": "login is required"}})
+		return
+	}
+	result, err := h.service.RotateAPIKey(c.Request.Context(), tenantID.(string), c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "KEY_ROTATION_FAILED", "message": err.Error()}})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": gin.H{"agent": result.Agent, "api_key": result.RawAPIKey}})
+}
+
+func (h *Handler) RevokeKey(c *gin.Context) {
+	tenantID, exists := c.Get("tenant_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": gin.H{"code": "UNAUTHENTICATED", "message": "login is required"}})
+		return
+	}
+	if err := h.service.RevokeAPIKey(c.Request.Context(), tenantID.(string), c.Param("id")); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "KEY_REVOCATION_FAILED", "message": err.Error()}})
+		return
+	}
+	c.JSON(http.StatusNoContent, nil)
+}

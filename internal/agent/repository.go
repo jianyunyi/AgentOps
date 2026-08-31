@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"errors"
+	"time"
 
 	"gorm.io/gorm"
 )
@@ -14,6 +15,7 @@ type Repository interface {
 	CreateCredential(ctx context.Context, credential *AgentCredential) error
 	FindCredentialByHash(ctx context.Context, keyHash string) (*AgentCredential, error)
 	ListAgents(ctx context.Context, tenantID string) ([]Agent, error)
+	RevokeCredentials(ctx context.Context, tenantID, agentID string) error
 }
 
 type GORMRepository struct {
@@ -49,4 +51,8 @@ func (r *GORMRepository) ListAgents(ctx context.Context, tenantID string) ([]Age
 		return nil, err
 	}
 	return agents, nil
+}
+
+func (r *GORMRepository) RevokeCredentials(ctx context.Context, tenantID, agentID string) error {
+	return r.db.WithContext(ctx).Model(&AgentCredential{}).Where("tenant_id = ? AND agent_id = ? AND status = ?", tenantID, agentID, CredentialActive).Updates(map[string]any{"status": CredentialRevoked, "revoked_at": time.Now().UTC()}).Error
 }

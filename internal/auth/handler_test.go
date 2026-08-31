@@ -31,4 +31,20 @@ func TestLoginSetsHttpOnlySessionCookie(t *testing.T) {
 	}
 }
 
+func TestRegisterCreatesSessionCookie(t *testing.T) {
+	repo := &fakeUserRepository{users: map[string]*User{}}
+	router := gin.New()
+	router.POST("/register", NewHandler(NewService(repo, "test-secret")).Register)
+	req := httptest.NewRequest("POST", "/register", strings.NewReader(`{"tenant_name":"Acme","email":"owner@example.com","password":"correct-password"}`))
+	req.Header.Set("Content-Type", "application/json")
+	res := httptest.NewRecorder()
+	router.ServeHTTP(res, req)
+	if res.Code != 201 {
+		t.Fatalf("register status = %d, body = %s", res.Code, res.Body.String())
+	}
+	if len(res.Result().Cookies()) != 1 || res.Result().Cookies()[0].Name != "agentscope_session" {
+		t.Fatal("registration must set session cookie")
+	}
+}
+
 func (f *fakeUserRepository) _contextCheck(_ context.Context) {}

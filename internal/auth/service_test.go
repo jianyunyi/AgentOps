@@ -6,8 +6,9 @@ import (
 )
 
 type fakeUserRepository struct {
-	users    map[string]*User
-	sessions map[string]*Session
+	users              map[string]*User
+	sessions           map[string]*Session
+	registeredTenantID string
 }
 
 func (f *fakeUserRepository) FindByEmail(_ context.Context, email string) (*User, error) {
@@ -32,6 +33,18 @@ func (f *fakeUserRepository) FindSession(_ context.Context, sessionID string) (*
 		return nil, ErrSessionNotFound
 	}
 	return session, nil
+}
+
+func (f *fakeUserRepository) RegisterTenantOwner(_ context.Context, tenantName string, user *User) (string, error) {
+	if tenantName == "" || user == nil {
+		return "", ErrInvalidRegistration
+	}
+	f.registeredTenantID = "ten_001"
+	if f.users == nil {
+		f.users = map[string]*User{}
+	}
+	f.users[user.Email] = user
+	return f.registeredTenantID, nil
 }
 
 func TestLoginCreatesTenantScopedSession(t *testing.T) {
@@ -75,5 +88,27 @@ func TestPermissionRequiresRoleCapability(t *testing.T) {
 	}
 	if HasPermission(RoleViewer, PermissionRiskReview) {
 		t.Fatal("viewer must not be allowed to review risks")
+	}
+}
+
+func TestRegisterCreatesTenantOwnerAndSession(t *testing.T) {
+	repo := &fakeUserRepository{users: map[string]*User{}}
+	svc := NewService(repo, "test-session-secret")
+
+	session, err := svc.Register(context.Background(), "Acme Operations", "owner@example.com", "correct-password")
+	if err != nil {
+		t.Fatalf("Register() error = %v", err)
+	}
+	if session.TenantID != "ten_001" || session.Role != RoleOwner {
+		t.Fatalf("unexpected session: %+v", session)
+	}
+	if repo.users["owner@example.com"] == nil {
+		t.Fatal("registration must create owner user")
+	}
+}
+
+func TestRegisterRejectsShortPassword(t *testing.T) {
+	if _, err := NewService(&fakeUserRepository{}, "secret").Register(context.Background(), "Acme", "owner@example.com", "short"); err == nil {
+		t.Fatal("Register() must reject a short password")
 	}
 }

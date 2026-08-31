@@ -25,7 +25,7 @@ const (
 type User struct {
 	ID           string `gorm:"primaryKey;size:32"`
 	TenantID     string `gorm:"index;size:32;not null"`
-	Email        string `gorm:"size:254;not null"`
+	Email        string `gorm:"uniqueIndex;size:254;not null"`
 	PasswordHash string `gorm:"size:128;not null"`
 	Role         string `gorm:"size:32;not null"`
 	Status       string `gorm:"size:16;not null"`
