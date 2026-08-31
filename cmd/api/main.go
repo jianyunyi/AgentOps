@@ -7,8 +7,10 @@ import (
 	"time"
 
 	"agentscope/internal/agent"
+	"agentscope/internal/audit"
 	"agentscope/internal/auth"
 	apihttp "agentscope/internal/http"
+	"agentscope/internal/outbox"
 	"agentscope/internal/platform/config"
 	"agentscope/internal/platform/database"
 	platformredis "agentscope/internal/platform/redis"
@@ -33,10 +35,12 @@ func main() {
 
 	_ = platformredis.NewClient(cfg.RedisAddr)
 	agentRepo := agent.NewGORMRepository(db)
-	agentService := agent.NewService(agentRepo)
+	auditService := audit.NewService(audit.NewGORMRepository(db))
+	agentService := agent.NewServiceWithAudit(agentRepo, auditService)
 	authService := auth.NewService(auth.NewGORMRepository(db), cfg.SessionSecret)
 	traceRepo := trace.NewGORMRepository(db)
-	traceService := trace.NewService(traceRepo)
+	outboxService := outbox.NewService(outbox.NewGORMRepository(db))
+	traceService := trace.NewServiceWithOutbox(traceRepo, outboxService)
 	router := apihttp.NewApplicationRouter(authService, agentService, traceService, traceRepo)
 
 	server := &http.Server{Addr: cfg.HTTPAddr, Handler: router}
