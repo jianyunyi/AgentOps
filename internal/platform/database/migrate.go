@@ -4,6 +4,7 @@ import (
 	"agentscope/internal/agent"
 	"agentscope/internal/audit"
 	"agentscope/internal/outbox"
+	"agentscope/internal/risk"
 	"agentscope/internal/auth"
 	"agentscope/internal/tenant"
 	"agentscope/internal/trace"
@@ -22,5 +23,6 @@ func Migrate(db *gorm.DB) error {
 		&trace.Trace{},
 		&trace.Span{},
 		&trace.EventRecord{},
+		&risk.RiskEvent{},
 	)
 }

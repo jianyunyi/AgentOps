@@ -1,6 +1,11 @@
 package outbox
 
-import "context"
+import (
+	"context"
+	"errors"
+
+	"gorm.io/gorm"
+)
 
 type Sender func(context.Context, Event) error
 type Publisher struct {
@@ -14,6 +19,9 @@ func NewPublisher(repo Repository, sender Sender) *Publisher {
 func (p *Publisher) PublishOne(ctx context.Context) error {
 	event, err := p.repo.ClaimPending(ctx)
 	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil
+		}
 		return err
 	}
 	if err := p.sender(ctx, *event); err != nil {

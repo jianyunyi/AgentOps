@@ -21,6 +21,7 @@ type AnalysisMessage struct {
 	EventID  string
 	TraceID  string
 	SpanID   string
+	Input    string
 }
 
 type Analyzer func(ctx context.Context, message AnalysisMessage) error

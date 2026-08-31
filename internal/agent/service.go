@@ -88,7 +88,9 @@ func (s *Service) CreateAgent(ctx context.Context, input CreateAgentInput) (Crea
 		return CreateAgentResult{}, err
 	}
 	if s.audit != nil {
-		_ = s.audit.Record(ctx, audit.RecordInput{TenantID: agent.TenantID, ActorID: "system", Action: "agent.create", ResourceType: "agent", ResourceID: agent.ID, After: map[string]any{"name": agent.Name, "environment": agent.Environment}})
+		if err := s.audit.Record(ctx, audit.RecordInput{TenantID: agent.TenantID, ActorID: "system", Action: "agent.create", ResourceType: "agent", ResourceID: agent.ID, After: map[string]any{"name": agent.Name, "environment": agent.Environment}}); err != nil {
+			return CreateAgentResult{}, fmt.Errorf("agent created but audit write failed: %w", err)
+		}
 	}
 	return CreateAgentResult{Agent: agent, RawAPIKey: rawKey}, nil
 }
@@ -120,7 +122,9 @@ func (s *Service) RotateAPIKey(ctx context.Context, tenantID, agentID string) (C
 		return CreateAgentResult{}, err
 	}
 	if s.audit != nil {
-		_ = s.audit.Record(ctx, audit.RecordInput{TenantID: tenantID, ActorID: "system", Action: "agent.key.rotate", ResourceType: "agent", ResourceID: agentID, After: map[string]any{"key_prefix": credential.KeyPrefix}})
+		if err := s.audit.Record(ctx, audit.RecordInput{TenantID: tenantID, ActorID: "system", Action: "agent.key.rotate", ResourceType: "agent", ResourceID: agentID, After: map[string]any{"key_prefix": credential.KeyPrefix}}); err != nil {
+			return CreateAgentResult{}, fmt.Errorf("key rotated but audit write failed: %w", err)
+		}
 	}
 	return CreateAgentResult{Agent: Agent{ID: agentID, TenantID: tenantID}, RawAPIKey: rawKey}, nil
 }
@@ -129,11 +133,15 @@ func (s *Service) RevokeAPIKey(ctx context.Context, tenantID, agentID string) er
 	if tenantID == "" || agentID == "" {
 		return errors.New("tenant and agent are required")
 	}
-	err := s.repo.RevokeCredentials(ctx, tenantID, agentID)
-	if err == nil && s.audit != nil {
-		_ = s.audit.Record(ctx, audit.RecordInput{TenantID: tenantID, ActorID: "system", Action: "agent.key.revoke", ResourceType: "agent", ResourceID: agentID})
+	if err := s.repo.RevokeCredentials(ctx, tenantID, agentID); err != nil {
+		return err
 	}
-	return err
+	if s.audit != nil {
+		if err := s.audit.Record(ctx, audit.RecordInput{TenantID: tenantID, ActorID: "system", Action: "agent.key.revoke", ResourceType: "agent", ResourceID: agentID}); err != nil {
+			return fmt.Errorf("key revoked but audit write failed: %w", err)
+		}
+	}
+	return nil
 }
 
 func randomKey() (string, error) {

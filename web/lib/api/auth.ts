@@ -1,9 +1,10 @@
-import { APIError } from "./client";
+import { request } from "./client";
+import type { CurrentUser } from "./types";
 
-export async function login(email: string, password: string): Promise<void> {
-  const response = await fetch("/api/v1/auth/login", { method: "POST", headers: { "content-type": "application/json" }, credentials: "include", body: JSON.stringify({ email, password }) });
-  if (!response.ok) {
-    const body = (await response.json()) as { error?: { code: string; message: string } };
-    throw new APIError(body.error?.code ?? "LOGIN_FAILED", body.error?.message ?? "Login failed", response.status);
-  }
+export function login(email: string, password: string): Promise<{ user_id: string; tenant_id: string }> {
+	return request<{ user_id: string; tenant_id: string }>("/api/v1/auth/login", { method: "POST", body: JSON.stringify({ email, password }) });
+}
+
+export function getCurrentUser(): Promise<CurrentUser> {
+  return request<CurrentUser>("/api/v1/auth/me");
 }

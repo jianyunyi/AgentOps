@@ -10,6 +10,9 @@ type Config struct {
 	RedisAddr     string
 	HTTPAddr      string
 	SessionSecret string
+	LLMBaseURL    string
+	LLMAPIKey     string
+	LLMModel      string
 }
 
 func Load() (Config, error) {
@@ -18,6 +21,9 @@ func Load() (Config, error) {
 		RedisAddr:     os.Getenv("REDIS_ADDR"),
 		HTTPAddr:      os.Getenv("HTTP_ADDR"),
 		SessionSecret: os.Getenv("SESSION_SECRET"),
+		LLMBaseURL:    os.Getenv("LLM_BASE_URL"),
+		LLMAPIKey:     os.Getenv("LLM_API_KEY"),
+		LLMModel:      os.Getenv("LLM_MODEL"),
 	}
 	if cfg.MySQLDSN == "" {
 		return Config{}, errors.New("MYSQL_DSN is required")

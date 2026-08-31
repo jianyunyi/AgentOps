@@ -18,6 +18,7 @@ func NewApplicationRouter(authService *auth.Service, agentService *agent.Service
 	agentHandler := agent.NewHandler(agentService)
 	console := router.Group("/api/v1")
 	console.Use(authHandler.Authenticate)
+	console.GET("/auth/me", authHandler.Me)
 	console.POST("/agents", auth.RequirePermission(auth.PermissionAgentWrite), agentHandler.Create)
 	console.GET("/agents", auth.RequirePermission(auth.PermissionAgentRead), agentHandler.List)
 	console.POST("/agents/:id/rotate-key", auth.RequirePermission(auth.PermissionAgentWrite), agentHandler.RotateKey)

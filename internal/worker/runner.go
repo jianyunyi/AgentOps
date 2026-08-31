@@ -4,8 +4,27 @@ import (
 	"context"
 	"time"
 
+	"agentscope/internal/outbox"
 	redisv9 "github.com/redis/go-redis/v9"
 )
+
+func RunOutbox(ctx context.Context, publisher *outbox.Publisher, interval time.Duration) error {
+	if interval <= 0 {
+		interval = 500 * time.Millisecond
+	}
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for {
+		if err := publisher.PublishOne(ctx); err != nil {
+			return err
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-ticker.C:
+		}
+	}
+}
 
 func Run(ctx context.Context, consumer *StreamConsumer, processor *AnalysisProcessor) error {
 	if err := EnsureAnalysisGroup(ctx, consumer.client); err != nil {

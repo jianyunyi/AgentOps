@@ -45,3 +45,10 @@ export interface Agent {
   environment: string;
   status: string;
 }
+
+export interface CurrentUser {
+  user_id: string;
+  tenant_id: string;
+  role: string;
+  permissions: string[];
+}

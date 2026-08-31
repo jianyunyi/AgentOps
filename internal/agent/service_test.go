@@ -1,9 +1,18 @@
 package agent
 
 import (
+	"agentscope/internal/audit"
 	"context"
+	"errors"
+	"strings"
 	"testing"
 )
+
+type failingAuditRepository struct{}
+
+func (failingAuditRepository) Append(context.Context, *audit.Record) error {
+	return errors.New("audit unavailable")
+}
 
 type fakeRepository struct {
 	agent       *Agent
@@ -119,5 +128,13 @@ func TestRotateAPIKeyRevokesPreviousCredential(t *testing.T) {
 	}
 	if len(repo.credentials) != 1 || repo.credentials[0].Status != CredentialRevoked {
 		t.Fatal("rotation must revoke the old credential")
+	}
+}
+
+func TestCreateAgentDoesNotSilentlyIgnoreAuditFailure(t *testing.T) {
+	svc := NewServiceWithAudit(&fakeRepository{}, audit.NewService(failingAuditRepository{}))
+	_, err := svc.CreateAgent(context.Background(), CreateAgentInput{TenantID: "tenant_001", Name: "Ops"})
+	if err == nil || !strings.Contains(err.Error(), "audit write failed") {
+		t.Fatalf("expected explicit audit failure, got %v", err)
 	}
 }

@@ -6,7 +6,7 @@ export class APIError extends Error {
   }
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+export async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, { ...init, credentials: "include" });
   const body = (await response.json()) as { data?: T; error?: { code: string; message: string } };
   if (!response.ok || !body.data) {

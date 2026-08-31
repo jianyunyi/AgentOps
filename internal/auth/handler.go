@@ -58,6 +58,20 @@ func (h *Handler) Register(c *gin.Context) {
 	c.JSON(http.StatusCreated, gin.H{"data": gin.H{"user_id": session.UserID, "tenant_id": session.TenantID, "role": session.Role}})
 }
 
+func (h *Handler) Me(c *gin.Context) {
+	userID, _ := c.Get("user_id")
+	tenantID, _ := c.Get("tenant_id")
+	role, _ := c.Get("user_role")
+	roleName, _ := role.(string)
+	permissions := []string{}
+	for _, permission := range []string{PermissionAgentRead, PermissionAgentWrite, PermissionRiskRead, PermissionRiskReview, PermissionAuditRead} {
+		if HasPermission(roleName, permission) {
+			permissions = append(permissions, permission)
+		}
+	}
+	c.JSON(http.StatusOK, gin.H{"data": gin.H{"user_id": userID, "tenant_id": tenantID, "role": roleName, "permissions": permissions}})
+}
+
 func (h *Handler) Authenticate(c *gin.Context) {
 	sessionID, err := c.Cookie("agentscope_session")
 	if err != nil || strings.TrimSpace(sessionID) == "" {

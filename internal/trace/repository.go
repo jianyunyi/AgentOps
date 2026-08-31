@@ -111,7 +111,7 @@ func (r *GORMRepository) IngestEventAtomic(ctx context.Context, identity IngestC
 		if err := tx.Create(&EventRecord{TenantID: identity.TenantID, EventID: event.EventID, CreatedAt: now}).Error; err != nil {
 			return err
 		}
-		payload, err := json.Marshal(map[string]string{"tenant_id": identity.TenantID, "event_id": event.EventID, "trace_id": event.TraceID, "span_id": event.SpanID})
+		payload, err := json.Marshal(map[string]any{"tenant_id": identity.TenantID, "event_id": event.EventID, "trace_id": event.TraceID, "span_id": event.SpanID, "input": string(event.Payload)})
 		if err != nil {
 			return err
 		}
