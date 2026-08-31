@@ -3,6 +3,8 @@ package worker
 import (
 	"context"
 	"sync"
+
+	"agentscope/internal/risk"
 )
 
 type Decision string
@@ -22,6 +24,17 @@ type AnalysisMessage struct {
 }
 
 type Analyzer func(ctx context.Context, message AnalysisMessage) error
+
+type RiskResult struct {
+	Level    string
+	Findings []risk.Finding
+	Redacted string
+}
+
+func AnalyzeRiskPayload(payload string) RiskResult {
+	result := risk.Analyze(payload)
+	return RiskResult{Level: result.Level, Findings: result.Findings, Redacted: result.Redacted}
+}
 
 type AnalysisProcessor struct {
 	maxAttempts int

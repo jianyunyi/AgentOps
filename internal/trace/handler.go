@@ -33,7 +33,7 @@ func NewRouter(service *Service, query QueryRepository, authenticator Authentica
 }
 
 func (h *Handler) ingest(c *gin.Context) {
-	identity, ok := h.authenticate(c)
+	identity, ok := h.authenticateAgent(c)
 	if !ok {
 		return
 	}
@@ -51,7 +51,7 @@ func (h *Handler) ingest(c *gin.Context) {
 }
 
 func (h *Handler) listTraces(c *gin.Context) {
-	identity, ok := h.authenticate(c)
+	identity, ok := h.authenticateQuery(c)
 	if !ok {
 		return
 	}
@@ -69,7 +69,7 @@ func (h *Handler) listTraces(c *gin.Context) {
 }
 
 func (h *Handler) getTrace(c *gin.Context) {
-	identity, ok := h.authenticate(c)
+	identity, ok := h.authenticateQuery(c)
 	if !ok {
 		return
 	}
@@ -86,7 +86,7 @@ func (h *Handler) getTrace(c *gin.Context) {
 }
 
 func (h *Handler) listSpans(c *gin.Context) {
-	identity, ok := h.authenticate(c)
+	identity, ok := h.authenticateQuery(c)
 	if !ok {
 		return
 	}
@@ -98,7 +98,7 @@ func (h *Handler) listSpans(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"data": spans})
 }
 
-func (h *Handler) authenticate(c *gin.Context) (agent.Identity, bool) {
+func (h *Handler) authenticateAgent(c *gin.Context) (agent.Identity, bool) {
 	header := c.GetHeader("Authorization")
 	if !strings.HasPrefix(header, "Bearer ") {
 		writeError(c, http.StatusUnauthorized, "UNAUTHORIZED_AGENT", "agent authorization is required")
@@ -110,6 +110,13 @@ func (h *Handler) authenticate(c *gin.Context) (agent.Identity, bool) {
 		return agent.Identity{}, false
 	}
 	return identity, true
+}
+
+func (h *Handler) authenticateQuery(c *gin.Context) (agent.Identity, bool) {
+	if tenantID, exists := c.Get("tenant_id"); exists {
+		return agent.Identity{TenantID: tenantID.(string), AgentID: "console"}, true
+	}
+	return h.authenticateAgent(c)
 }
 
 func writeIngestError(c *gin.Context, err error) {

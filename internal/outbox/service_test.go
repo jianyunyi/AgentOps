@@ -11,6 +11,9 @@ func (f *fakeRepository) Create(_ context.Context, event *Event) error {
 	f.events = append(f.events, *event)
 	return nil
 }
+func (f *fakeRepository) ClaimPending(context.Context) (*Event, error) { return &f.events[0], nil }
+func (f *fakeRepository) MarkDelivered(context.Context, string) error  { return nil }
+func (f *fakeRepository) MarkFailed(context.Context, string) error     { return nil }
 
 func TestEnqueueCreatesPendingEvent(t *testing.T) {
 	repo := &fakeRepository{}

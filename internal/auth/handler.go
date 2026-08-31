@@ -77,6 +77,19 @@ func (h *Handler) Authenticate(c *gin.Context) {
 	c.Next()
 }
 
+func OptionalAuthenticate(service *Service) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if sessionID, err := c.Cookie("agentscope_session"); err == nil {
+			if session, resolveErr := service.ResolveSession(c.Request.Context(), sessionID); resolveErr == nil {
+				c.Set("user_id", session.UserID)
+				c.Set("tenant_id", session.TenantID)
+				c.Set("user_role", session.Role)
+			}
+		}
+		c.Next()
+	}
+}
+
 func timeUntil(deadline time.Time) int {
 	seconds := int(time.Until(deadline).Seconds())
 	if seconds < 1 {

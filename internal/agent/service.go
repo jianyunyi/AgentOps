@@ -10,6 +10,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"agentscope/internal/audit"
 )
 
 var ErrInvalidAPIKey = errors.New("invalid agent api key")
@@ -32,11 +34,16 @@ type Identity struct {
 }
 
 type Service struct {
-	repo Repository
+	repo  Repository
+	audit *audit.Service
 }
 
 func NewService(repo Repository) *Service {
 	return &Service{repo: repo}
+}
+
+func NewServiceWithAudit(repo Repository, auditService *audit.Service) *Service {
+	return &Service{repo: repo, audit: auditService}
 }
 
 func (s *Service) CreateAgent(ctx context.Context, input CreateAgentInput) (CreateAgentResult, error) {
@@ -80,6 +87,9 @@ func (s *Service) CreateAgent(ctx context.Context, input CreateAgentInput) (Crea
 	if err := s.repo.CreateCredential(ctx, &credential); err != nil {
 		return CreateAgentResult{}, err
 	}
+	if s.audit != nil {
+		_ = s.audit.Record(ctx, audit.RecordInput{TenantID: agent.TenantID, ActorID: "system", Action: "agent.create", ResourceType: "agent", ResourceID: agent.ID, After: map[string]any{"name": agent.Name, "environment": agent.Environment}})
+	}
 	return CreateAgentResult{Agent: agent, RawAPIKey: rawKey}, nil
 }
 
@@ -109,6 +119,9 @@ func (s *Service) RotateAPIKey(ctx context.Context, tenantID, agentID string) (C
 	if err := s.repo.CreateCredential(ctx, credential); err != nil {
 		return CreateAgentResult{}, err
 	}
+	if s.audit != nil {
+		_ = s.audit.Record(ctx, audit.RecordInput{TenantID: tenantID, ActorID: "system", Action: "agent.key.rotate", ResourceType: "agent", ResourceID: agentID, After: map[string]any{"key_prefix": credential.KeyPrefix}})
+	}
 	return CreateAgentResult{Agent: Agent{ID: agentID, TenantID: tenantID}, RawAPIKey: rawKey}, nil
 }
 
@@ -116,7 +129,11 @@ func (s *Service) RevokeAPIKey(ctx context.Context, tenantID, agentID string) er
 	if tenantID == "" || agentID == "" {
 		return errors.New("tenant and agent are required")
 	}
-	return s.repo.RevokeCredentials(ctx, tenantID, agentID)
+	err := s.repo.RevokeCredentials(ctx, tenantID, agentID)
+	if err == nil && s.audit != nil {
+		_ = s.audit.Record(ctx, audit.RecordInput{TenantID: tenantID, ActorID: "system", Action: "agent.key.revoke", ResourceType: "agent", ResourceID: agentID})
+	}
+	return err
 }
 
 func randomKey() (string, error) {

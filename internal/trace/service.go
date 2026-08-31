@@ -4,9 +4,12 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"strings"
 	"time"
+
+	"agentscope/internal/outbox"
 )
 
 var (
@@ -16,11 +19,20 @@ var (
 )
 
 type Service struct {
-	repo Repository
+	repo   Repository
+	outbox *outbox.Service
+}
+
+type atomicIngestRepository interface {
+	IngestEventAtomic(ctx context.Context, identity IngestContext, event Event) (IngestResult, error)
 }
 
 func NewService(repo Repository) *Service {
 	return &Service{repo: repo}
+}
+
+func NewServiceWithOutbox(repo Repository, outboxService *outbox.Service) *Service {
+	return &Service{repo: repo, outbox: outboxService}
 }
 
 func (s *Service) Ingest(ctx context.Context, identity IngestContext, event Event) (IngestResult, error) {
@@ -35,6 +47,9 @@ func (s *Service) Ingest(ctx context.Context, identity IngestContext, event Even
 	}
 	if len(event.Payload) > MaxPayloadBytes {
 		return IngestResult{}, ErrPayloadTooLarge
+	}
+	if atomicRepo, ok := s.repo.(atomicIngestRepository); ok {
+		return atomicRepo.IngestEventAtomic(ctx, identity, event)
 	}
 	exists, err := s.repo.EventExists(ctx, identity.TenantID, event.EventID)
 	if err != nil {
@@ -94,6 +109,12 @@ func (s *Service) Ingest(ctx context.Context, identity IngestContext, event Even
 	}
 	if err := s.repo.MarkEvent(ctx, identity.TenantID, event.EventID); err != nil {
 		return IngestResult{}, err
+	}
+	if s.outbox != nil {
+		payload, _ := json.Marshal(map[string]string{"tenant_id": identity.TenantID, "event_id": event.EventID, "trace_id": event.TraceID, "span_id": event.SpanID})
+		if err := s.outbox.Enqueue(ctx, outbox.EventInput{TenantID: identity.TenantID, EventType: "trace.analyze", AggregateID: event.TraceID, Payload: payload}); err != nil {
+			return IngestResult{}, err
+		}
 	}
 	return IngestResult{}, nil
 }

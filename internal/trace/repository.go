@@ -2,8 +2,13 @@ package trace
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
+	"time"
 
+	"agentscope/internal/outbox"
 	"gorm.io/gorm"
 )
 
@@ -66,6 +71,68 @@ func (r *GORMRepository) MarkEvent(ctx context.Context, tenantID, eventID string
 		"tenant_id": tenantID,
 		"event_id":  eventID,
 	}).Error
+}
+
+func (r *GORMRepository) IngestEventAtomic(ctx context.Context, identity IngestContext, event Event) (IngestResult, error) {
+	var duplicate bool
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var count int64
+		if err := tx.Model(&EventRecord{}).Where("tenant_id = ? AND event_id = ?", identity.TenantID, event.EventID).Count(&count).Error; err != nil {
+			return err
+		}
+		if count > 0 {
+			duplicate = true
+			return nil
+		}
+		now := time.Now().UTC()
+		var trace Trace
+		traceErr := tx.Where("tenant_id = ? AND trace_id = ?", identity.TenantID, event.TraceID).First(&trace).Error
+		if errors.Is(traceErr, gorm.ErrRecordNotFound) {
+			trace = Trace{ID: traceID(), TenantID: identity.TenantID, AgentID: identity.AgentID, TraceID: event.TraceID, Status: TraceRunning, RiskLevel: "none", StartedAt: event.OccurredAt, AnalysisStatus: "pending", CreatedAt: now, UpdatedAt: now}
+			if err := tx.Create(&trace).Error; err != nil {
+				return err
+			}
+		} else if traceErr != nil {
+			return traceErr
+		}
+		span := Span{ID: spanID(), TenantID: identity.TenantID, TraceID: event.TraceID, SpanID: event.SpanID, ParentSpanID: event.ParentSpanID, SpanType: event.EventType, Name: event.EventType, Status: "success", Sequence: event.Sequence, InputSnapshot: event.Payload, StartedAt: event.OccurredAt, CreatedAt: now}
+		if err := tx.Create(&span).Error; err != nil {
+			return err
+		}
+		if event.EventType == EventTraceEnd {
+			trace.Status = TraceSuccess
+			trace.EndedAt = &event.OccurredAt
+			trace.DurationMS = event.OccurredAt.Sub(trace.StartedAt).Milliseconds()
+			trace.UpdatedAt = now
+			if err := tx.Save(&trace).Error; err != nil {
+				return err
+			}
+		}
+		if err := tx.Create(&EventRecord{TenantID: identity.TenantID, EventID: event.EventID, CreatedAt: now}).Error; err != nil {
+			return err
+		}
+		payload, err := json.Marshal(map[string]string{"tenant_id": identity.TenantID, "event_id": event.EventID, "trace_id": event.TraceID, "span_id": event.SpanID})
+		if err != nil {
+			return err
+		}
+		outboxRecord := outbox.Event{ID: outboxID(), TenantID: identity.TenantID, EventType: "trace.analyze", AggregateID: event.TraceID, Payload: payload, Status: outbox.StatusPending, AvailableAt: now, CreatedAt: now}
+		return tx.Create(&outboxRecord).Error
+	})
+	if err != nil {
+		return IngestResult{}, err
+	}
+	return IngestResult{Duplicate: duplicate}, nil
+}
+
+func traceID() string  { return randomPrefixedID("trc_") }
+func spanID() string   { return randomPrefixedID("spn_") }
+func outboxID() string { return randomPrefixedID("out_") }
+func randomPrefixedID(prefix string) string {
+	buf := make([]byte, 12)
+	if _, err := rand.Read(buf); err != nil {
+		panic(err)
+	}
+	return prefix + hex.EncodeToString(buf)
 }
 
 func (r *GORMRepository) ListTraces(ctx context.Context, tenantID string, offset, limit int) ([]Trace, int64, error) {

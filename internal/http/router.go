@@ -13,6 +13,7 @@ func NewRouter(traceService *trace.Service, traceQuery trace.QueryRepository, au
 
 func NewApplicationRouter(authService *auth.Service, agentService *agent.Service, traceService *trace.Service, traceQuery trace.QueryRepository) *gin.Engine {
 	router := trace.NewRouter(traceService, traceQuery, agentService)
+	router.Use(auth.OptionalAuthenticate(authService))
 	authHandler := auth.NewHandler(authService)
 	agentHandler := agent.NewHandler(agentService)
 	console := router.Group("/api/v1")
