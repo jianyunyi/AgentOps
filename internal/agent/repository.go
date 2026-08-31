@@ -13,6 +13,7 @@ type Repository interface {
 	CreateAgent(ctx context.Context, agent *Agent) error
 	CreateCredential(ctx context.Context, credential *AgentCredential) error
 	FindCredentialByHash(ctx context.Context, keyHash string) (*AgentCredential, error)
+	ListAgents(ctx context.Context, tenantID string) ([]Agent, error)
 }
 
 type GORMRepository struct {
@@ -40,4 +41,12 @@ func (r *GORMRepository) FindCredentialByHash(ctx context.Context, keyHash strin
 		return nil, err
 	}
 	return &credential, nil
+}
+
+func (r *GORMRepository) ListAgents(ctx context.Context, tenantID string) ([]Agent, error) {
+	var agents []Agent
+	if err := r.db.WithContext(ctx).Where("tenant_id = ?", tenantID).Order("created_at DESC").Find(&agents).Error; err != nil {
+		return nil, err
+	}
+	return agents, nil
 }

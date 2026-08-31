@@ -27,6 +27,13 @@ func (f *fakeRepository) FindCredentialByHash(_ context.Context, hash string) (*
 	return f.credential, nil
 }
 
+func (f *fakeRepository) ListAgents(_ context.Context, tenantID string) ([]Agent, error) {
+	if f.agent != nil && f.agent.TenantID == tenantID {
+		return []Agent{*f.agent}, nil
+	}
+	return []Agent{}, nil
+}
+
 func TestCreateAgentReturnsRawKeyOnceAndPersistsOnlyHash(t *testing.T) {
 	repo := &fakeRepository{}
 	svc := NewService(repo)
