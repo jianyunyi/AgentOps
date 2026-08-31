@@ -19,7 +19,7 @@ func (s *Service) Enqueue(ctx context.Context, input EventInput) error {
 	if err != nil {
 		return err
 	}
-	return s.repo.Create(ctx, &Event{ID: id, TenantID: input.TenantID, EventType: input.EventType, AggregateID: input.AggregateID, Payload: input.Payload, Status: StatusPending, AvailableAt: time.Now().UTC(), CreatedAt: time.Now().UTC()})
+	return s.repo.Create(ctx, &Event{ID: id, TenantID: input.TenantID, EventType: input.EventType, AggregateID: input.AggregateID, DedupKey: input.DedupKey, Payload: input.Payload, Status: StatusPending, AvailableAt: time.Now().UTC(), CreatedAt: time.Now().UTC()})
 }
 func newID() (string, error) {
 	buf := make([]byte, 12)

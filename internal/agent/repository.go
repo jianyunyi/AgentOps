@@ -5,6 +5,7 @@ import (
 	"errors"
 	"time"
 
+	"agentscope/internal/audit"
 	"gorm.io/gorm"
 )
 
@@ -34,15 +35,53 @@ func (r *GORMRepository) CreateCredential(ctx context.Context, credential *Agent
 	return r.db.WithContext(ctx).Create(credential).Error
 }
 
+func (r *GORMRepository) CreateAgentWithCredentialAndAudit(ctx context.Context, agent *Agent, credential *AgentCredential, record *audit.Record) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(agent).Error; err != nil {
+			return err
+		}
+		if err := tx.Create(credential).Error; err != nil {
+			return err
+		}
+		return tx.Create(record).Error
+	})
+}
+
+func (r *GORMRepository) RotateCredentialWithAudit(ctx context.Context, tenantID, agentID string, credential *AgentCredential, record *audit.Record) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Model(&AgentCredential{}).Where("tenant_id = ? AND agent_id = ? AND status = ?", tenantID, agentID, CredentialActive).Updates(map[string]any{"status": CredentialRevoked, "revoked_at": time.Now().UTC()}).Error; err != nil {
+			return err
+		}
+		if err := tx.Create(credential).Error; err != nil {
+			return err
+		}
+		return tx.Create(record).Error
+	})
+}
+
+func (r *GORMRepository) RevokeCredentialWithAudit(ctx context.Context, tenantID, agentID string, record *audit.Record) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Model(&AgentCredential{}).Where("tenant_id = ? AND agent_id = ? AND status = ?", tenantID, agentID, CredentialActive).Updates(map[string]any{"status": CredentialRevoked, "revoked_at": time.Now().UTC()}).Error; err != nil {
+			return err
+		}
+		return tx.Create(record).Error
+	})
+}
+
 func (r *GORMRepository) FindCredentialByHash(ctx context.Context, keyHash string) (*AgentCredential, error) {
 	var credential AgentCredential
-	if err := r.db.WithContext(ctx).Where("key_hash = ? AND status = ?", keyHash, CredentialActive).First(&credential).Error; err != nil {
+	if err := r.db.WithContext(ctx).Where("key_hash = ? AND status = ? AND (expires_at IS NULL OR expires_at > ?)", keyHash, CredentialActive, time.Now().UTC()).First(&credential).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, ErrCredentialNotFound
 		}
 		return nil, err
 	}
 	return &credential, nil
+}
+
+func (r *GORMRepository) TouchCredential(ctx context.Context, id, ip string) error {
+	now := time.Now().UTC()
+	return r.db.WithContext(ctx).Model(&AgentCredential{}).Where("id = ?", id).Updates(map[string]any{"last_used_at": now, "last_used_ip": ip}).Error
 }
 
 func (r *GORMRepository) ListAgents(ctx context.Context, tenantID string) ([]Agent, error) {

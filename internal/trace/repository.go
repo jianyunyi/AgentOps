@@ -115,7 +115,7 @@ func (r *GORMRepository) IngestEventAtomic(ctx context.Context, identity IngestC
 		if err != nil {
 			return err
 		}
-		outboxRecord := outbox.Event{ID: outboxID(), TenantID: identity.TenantID, EventType: "trace.analyze", AggregateID: event.TraceID, Payload: payload, Status: outbox.StatusPending, AvailableAt: now, CreatedAt: now}
+		outboxRecord := outbox.Event{ID: outboxID(), TenantID: identity.TenantID, EventType: "trace.analyze", AggregateID: event.TraceID, DedupKey: identity.TenantID + ":" + event.EventID, Payload: payload, Status: outbox.StatusPending, AvailableAt: now, CreatedAt: now}
 		return tx.Create(&outboxRecord).Error
 	})
 	if err != nil {

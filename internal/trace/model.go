@@ -51,36 +51,36 @@ type IngestResult struct {
 }
 
 type Trace struct {
-	ID             string  `gorm:"primaryKey;size:32"`
-	TenantID       string  `gorm:"index;size:32;not null"`
-	AgentID        string  `gorm:"index;size:32;not null"`
-	TraceID        string  `gorm:"uniqueIndex:idx_trace_tenant;size:64;not null"`
-	Status         string  `gorm:"size:16;not null"`
-	RiskLevel      string  `gorm:"size:16;not null"`
-	TotalTokens    int     `gorm:"not null;default:0"`
-	EstimatedCost  float64 `gorm:"not null;default:0"`
-	StartedAt      time.Time
-	EndedAt        *time.Time
-	DurationMS     int64  `gorm:"not null;default:0"`
-	AnalysisStatus string `gorm:"size:16;not null"`
-	CreatedAt      time.Time
-	UpdatedAt      time.Time
+	ID             string     `gorm:"primaryKey;size:32" json:"id"`
+	TenantID       string     `gorm:"index;size:32;not null" json:"tenantId"`
+	AgentID        string     `gorm:"index;size:32;not null" json:"agentId"`
+	TraceID        string     `gorm:"uniqueIndex:idx_trace_tenant;size:64;not null" json:"traceId"`
+	Status         string     `gorm:"size:16;not null" json:"status"`
+	RiskLevel      string     `gorm:"size:16;not null" json:"riskLevel"`
+	TotalTokens    int        `gorm:"not null;default:0" json:"totalTokens"`
+	EstimatedCost  float64    `gorm:"not null;default:0" json:"estimatedCost"`
+	StartedAt      time.Time  `json:"startedAt"`
+	EndedAt        *time.Time `json:"endedAt,omitempty"`
+	DurationMS     int64      `gorm:"not null;default:0" json:"durationMs"`
+	AnalysisStatus string     `gorm:"size:16;not null" json:"analysisStatus"`
+	CreatedAt      time.Time  `json:"createdAt"`
+	UpdatedAt      time.Time  `json:"updatedAt"`
 }
 
 type Span struct {
-	ID             string          `gorm:"primaryKey;size:32"`
-	TenantID       string          `gorm:"index;size:32;not null"`
-	TraceID        string          `gorm:"index:idx_span_trace_sequence;size:64;not null"`
-	SpanID         string          `gorm:"uniqueIndex:idx_span_tenant;size:64;not null"`
-	ParentSpanID   string          `gorm:"size:64"`
-	SpanType       string          `gorm:"size:32;not null"`
-	Name           string          `gorm:"size:128;not null"`
-	Status         string          `gorm:"size:16;not null"`
-	Sequence       int             `gorm:"index:idx_span_trace_sequence;not null"`
-	InputSnapshot  json.RawMessage `gorm:"type:json"`
-	OutputSnapshot json.RawMessage `gorm:"type:json"`
-	StartedAt      time.Time
-	EndedAt        *time.Time
-	DurationMS     int64 `gorm:"not null;default:0"`
-	CreatedAt      time.Time
+	ID             string          `gorm:"primaryKey;size:32" json:"id"`
+	TenantID       string          `gorm:"index;size:32;not null" json:"tenantId"`
+	TraceID        string          `gorm:"index:idx_span_trace_sequence;size:64;not null" json:"traceId"`
+	SpanID         string          `gorm:"uniqueIndex:idx_span_tenant;size:64;not null" json:"spanId"`
+	ParentSpanID   string          `gorm:"size:64" json:"parentSpanId"`
+	SpanType       string          `gorm:"size:32;not null" json:"spanType"`
+	Name           string          `gorm:"size:128;not null" json:"name"`
+	Status         string          `gorm:"size:16;not null" json:"status"`
+	Sequence       int             `gorm:"index:idx_span_trace_sequence;not null" json:"sequence"`
+	InputSnapshot  json.RawMessage `gorm:"type:json" json:"inputSnapshot,omitempty"`
+	OutputSnapshot json.RawMessage `gorm:"type:json" json:"outputSnapshot,omitempty"`
+	StartedAt      time.Time       `json:"startedAt"`
+	EndedAt        *time.Time      `json:"endedAt,omitempty"`
+	DurationMS     int64           `gorm:"not null;default:0" json:"durationMs"`
+	CreatedAt      time.Time       `json:"createdAt"`
 }

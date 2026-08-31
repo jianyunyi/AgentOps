@@ -111,8 +111,8 @@ func (s *Service) Ingest(ctx context.Context, identity IngestContext, event Even
 		return IngestResult{}, err
 	}
 	if s.outbox != nil {
-		payload, _ := json.Marshal(map[string]string{"tenant_id": identity.TenantID, "event_id": event.EventID, "trace_id": event.TraceID, "span_id": event.SpanID})
-		if err := s.outbox.Enqueue(ctx, outbox.EventInput{TenantID: identity.TenantID, EventType: "trace.analyze", AggregateID: event.TraceID, Payload: payload}); err != nil {
+		payload, _ := json.Marshal(map[string]string{"version": "v1", "tenant_id": identity.TenantID, "event_id": event.EventID, "trace_id": event.TraceID, "span_id": event.SpanID, "input": string(event.Payload)})
+		if err := s.outbox.Enqueue(ctx, outbox.EventInput{TenantID: identity.TenantID, EventType: "trace.analyze", AggregateID: event.TraceID, DedupKey: identity.TenantID + ":" + event.EventID, Payload: payload}); err != nil {
 			return IngestResult{}, err
 		}
 	}

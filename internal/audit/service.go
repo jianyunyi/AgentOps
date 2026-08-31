@@ -12,19 +12,27 @@ type Service struct{ repo Repository }
 func NewService(repo Repository) *Service { return &Service{repo: repo} }
 
 func (s *Service) Record(ctx context.Context, input RecordInput) error {
-	before, err := marshalRedacted(input.Before)
+	record, err := s.Prepare(input)
 	if err != nil {
 		return err
 	}
+	return s.repo.Append(ctx, record)
+}
+
+func (s *Service) Prepare(input RecordInput) (*Record, error) {
+	before, err := marshalRedacted(input.Before)
+	if err != nil {
+		return nil, err
+	}
 	after, err := marshalRedacted(input.After)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	actorType := input.ActorType
 	if actorType == "" {
 		actorType = "user"
 	}
-	return s.repo.Append(ctx, &Record{TenantID: input.TenantID, ActorID: input.ActorID, ActorType: actorType, Action: input.Action, ResourceType: input.ResourceType, ResourceID: input.ResourceID, Before: before, After: after, RequestID: input.RequestID, CreatedAt: time.Now().UTC()})
+	return &Record{TenantID: input.TenantID, ActorID: input.ActorID, ActorType: actorType, Action: input.Action, ResourceType: input.ResourceType, ResourceID: input.ResourceID, Before: before, After: after, RequestID: input.RequestID, CreatedAt: time.Now().UTC()}, nil
 }
 
 func marshalRedacted(input map[string]any) (json.RawMessage, error) {
