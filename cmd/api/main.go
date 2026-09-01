@@ -4,6 +4,9 @@ import (
 	"context"
 	"log"
 	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"agentscope/internal/agent"
@@ -29,7 +32,7 @@ func main() {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	db, err := database.Open(ctx, cfg.MySQLDSN)
+	db, err := database.OpenWithPool(ctx, cfg.MySQLDSN, cfg.DBMaxOpenConns, cfg.DBMaxIdleConns, time.Duration(cfg.DBConnMaxLifetimeMinutes)*time.Minute)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -82,9 +85,23 @@ func main() {
 		return redisClient.Ping(ctx).Err()
 	})
 
-	server := &http.Server{Addr: cfg.HTTPAddr, Handler: router}
+	server := &http.Server{Addr: cfg.HTTPAddr, Handler: router, ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 30 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 120 * time.Second, MaxHeaderBytes: 32 * 1024}
 	log.Printf("agentscope api listening on %s", cfg.HTTPAddr)
-	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-		log.Fatal(err)
+	serverErr := make(chan error, 1)
+	go func() { serverErr <- server.ListenAndServe() }()
+	stop, stopCancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stopCancel()
+	select {
+	case err := <-serverErr:
+		if err != nil && err != http.ErrServerClosed {
+			log.Fatal(err)
+		}
+	case <-stop.Done():
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+		if err := server.Shutdown(shutdownCtx); err != nil {
+			log.Printf("graceful shutdown failed: %v", err)
+		}
+		<-serverErr
 	}
 }

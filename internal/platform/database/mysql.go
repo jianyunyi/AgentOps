@@ -9,6 +9,10 @@ import (
 )
 
 func Open(ctx context.Context, dsn string) (*gorm.DB, error) {
+	return OpenWithPool(ctx, dsn, 50, 10, 30*time.Minute)
+}
+
+func OpenWithPool(ctx context.Context, dsn string, maxOpen, maxIdle int, maxLifetime time.Duration) (*gorm.DB, error) {
 	db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{})
 	if err != nil {
 		return nil, err
@@ -18,9 +22,9 @@ func Open(ctx context.Context, dsn string) (*gorm.DB, error) {
 	if err != nil {
 		return nil, err
 	}
-	sqlDB.SetMaxIdleConns(10)
-	sqlDB.SetMaxOpenConns(50)
-	sqlDB.SetConnMaxLifetime(30 * time.Minute)
+	sqlDB.SetMaxIdleConns(maxIdle)
+	sqlDB.SetMaxOpenConns(maxOpen)
+	sqlDB.SetConnMaxLifetime(maxLifetime)
 
 	if err := sqlDB.PingContext(ctx); err != nil {
 		_ = sqlDB.Close()

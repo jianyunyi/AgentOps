@@ -287,13 +287,15 @@ func (s *Service) LoginOIDC(ctx context.Context, oidcService *OIDCService, ident
 			if err := repo.BindOIDC(ctx, user.ID, oidcService.Issuer(), identity.Subject); err != nil {
 				return nil, err
 			}
-			user.OIDCIssuer, user.OIDCSubject = oidcService.Issuer(), identity.Subject
+			issuer, subject := oidcService.Issuer(), identity.Subject
+			user.OIDCIssuer, user.OIDCSubject = &issuer, &subject
 		} else if errors.Is(err, ErrUserNotFound) {
 			role := oidcService.DefaultRole()
 			if !validMemberRole(role) {
 				role = RoleViewer
 			}
-			user = &User{ID: mustID("usr_"), TenantID: oidcService.TenantID(), Email: identity.Email, Role: role, Status: UserActive, OIDCIssuer: oidcService.Issuer(), OIDCSubject: identity.Subject}
+			issuer, subject := oidcService.Issuer(), identity.Subject
+			user = &User{ID: mustID("usr_"), TenantID: oidcService.TenantID(), Email: identity.Email, Role: role, Status: UserActive, OIDCIssuer: &issuer, OIDCSubject: &subject}
 			if err := repo.CreateOIDCUser(ctx, user); err != nil {
 				return nil, err
 			}
@@ -343,7 +345,8 @@ func randomToken() (string, error) {
 }
 
 func randomSessionID() (string, error) {
-	buf := make([]byte, 32)
+	// Session IDs are stored in VARCHAR(64), including the "ses_" prefix.
+	buf := make([]byte, 28)
 	if _, err := rand.Read(buf); err != nil {
 		return "", err
 	}
@@ -355,7 +358,9 @@ func mustID(prefix string) string {
 	if err != nil {
 		panic(err)
 	}
-	return prefix + id[4:]
+	// Entity IDs are stored in VARCHAR(32); keep the generated identifier
+	// comfortably within that limit while retaining enough entropy.
+	return prefix + id[4:28]
 }
 
 func timeNow() time.Time { return time.Now().UTC() }

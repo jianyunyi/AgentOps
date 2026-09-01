@@ -38,9 +38,9 @@ func TestMemberAPIInvitationAndOwnerTransfer(t *testing.T) {
 		t.Fatal(err)
 	}
 	stamp := time.Now().UnixNano()
-	tenantID := fmt.Sprintf("api_ten_%d", stamp)
-	ownerID := fmt.Sprintf("api_usr_%d", stamp)
-	targetID := fmt.Sprintf("api_usr_target_%d", stamp)
+	tenantID := fmt.Sprintf("t%d", stamp)
+	ownerID := fmt.Sprintf("o%d", stamp)
+	targetID := fmt.Sprintf("v%d", stamp)
 	if err := db.Create(&tenant.Tenant{ID: tenantID, Name: "API Integration", Status: "active"}).Error; err != nil {
 		t.Fatal(err)
 	}
@@ -52,7 +52,7 @@ func TestMemberAPIInvitationAndOwnerTransfer(t *testing.T) {
 	if err := db.Create(target).Error; err != nil {
 		t.Fatal(err)
 	}
-	session := &auth.Session{ID: fmt.Sprintf("api_ses_%d", stamp), UserID: ownerID, TenantID: tenantID, Role: auth.RoleOwner, ExpiresAt: time.Now().Add(time.Hour)}
+	session := &auth.Session{ID: fmt.Sprintf("s%d", stamp), UserID: ownerID, TenantID: tenantID, Role: auth.RoleOwner, ExpiresAt: time.Now().Add(time.Hour)}
 	if err := db.Create(session).Error; err != nil {
 		t.Fatal(err)
 	}
@@ -87,7 +87,8 @@ func TestMemberAPIInvitationAndOwnerTransfer(t *testing.T) {
 	if len(page.Data) != 1 || page.Pagination.Total != 2 {
 		t.Fatalf("unexpected page: %+v", page)
 	}
-	response = request(http.MethodPost, "/api/v1/members/invitations", `{"email":"new@example.com","role":"viewer","ttl_hours":1}`)
+	inviteEmail := fmt.Sprintf("new-%d@example.com", stamp)
+	response = request(http.MethodPost, "/api/v1/members/invitations", fmt.Sprintf(`{"email":%q,"role":"viewer","ttl_hours":1}`, inviteEmail))
 	if response.Code != http.StatusCreated {
 		t.Fatalf("invite status = %d, body=%s", response.Code, response.Body.String())
 	}

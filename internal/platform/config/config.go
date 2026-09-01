@@ -7,21 +7,24 @@ import (
 )
 
 type Config struct {
-	MySQLDSN         string
-	RedisAddr        string
-	HTTPAddr         string
-	SessionSecret    string
-	WebOrigin        string
-	MaxBodyBytes     int64
-	LLMBaseURL       string
-	LLMAPIKey        string
-	LLMModel         string
-	OIDCIssuerURL    string
-	OIDCClientID     string
-	OIDCClientSecret string
-	OIDCRedirectURL  string
-	OIDCTenantID     string
-	OIDCDefaultRole  string
+	MySQLDSN                 string
+	RedisAddr                string
+	HTTPAddr                 string
+	SessionSecret            string
+	WebOrigin                string
+	MaxBodyBytes             int64
+	LLMBaseURL               string
+	LLMAPIKey                string
+	LLMModel                 string
+	OIDCIssuerURL            string
+	OIDCClientID             string
+	OIDCClientSecret         string
+	OIDCRedirectURL          string
+	OIDCTenantID             string
+	OIDCDefaultRole          string
+	DBMaxOpenConns           int
+	DBMaxIdleConns           int
+	DBConnMaxLifetimeMinutes int
 }
 
 func Load() (Config, error) {
@@ -60,6 +63,31 @@ func Load() (Config, error) {
 			return Config{}, errors.New("MAX_BODY_BYTES must be at least 1024")
 		}
 		cfg.MaxBodyBytes = value
+	}
+	cfg.DBMaxOpenConns, cfg.DBMaxIdleConns, cfg.DBConnMaxLifetimeMinutes = 50, 10, 30
+	if raw := os.Getenv("DB_MAX_OPEN_CONNS"); raw != "" {
+		value, err := strconv.Atoi(raw)
+		if err != nil || value < 1 {
+			return Config{}, errors.New("DB_MAX_OPEN_CONNS must be positive")
+		}
+		cfg.DBMaxOpenConns = value
+	}
+	if raw := os.Getenv("DB_MAX_IDLE_CONNS"); raw != "" {
+		value, err := strconv.Atoi(raw)
+		if err != nil || value < 0 {
+			return Config{}, errors.New("DB_MAX_IDLE_CONNS must be non-negative")
+		}
+		cfg.DBMaxIdleConns = value
+	}
+	if raw := os.Getenv("DB_CONN_MAX_LIFETIME_MINUTES"); raw != "" {
+		value, err := strconv.Atoi(raw)
+		if err != nil || value < 1 {
+			return Config{}, errors.New("DB_CONN_MAX_LIFETIME_MINUTES must be positive")
+		}
+		cfg.DBConnMaxLifetimeMinutes = value
+	}
+	if len(cfg.SessionSecret) < 32 {
+		return Config{}, errors.New("SESSION_SECRET must be at least 32 characters")
 	}
 	return cfg, nil
 }

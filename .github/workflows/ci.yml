@@ -7,6 +7,28 @@ on:
 jobs:
   backend:
     runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: agentscope
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -proot"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+      redis:
+        image: redis:7.4-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -14,6 +36,12 @@ jobs:
           go-version-file: go.mod
       - run: go test ./...
       - run: go vet ./...
+      - name: MySQL Redis integration tests
+        env:
+          AGENTSCOPE_INTEGRATION: "1"
+          MYSQL_DSN: "root:root@tcp(127.0.0.1:3306)/agentscope?charset=utf8mb4&parseTime=True&loc=UTC"
+          REDIS_ADDR: 127.0.0.1:6379
+        run: go test ./internal/integration -v
 
   frontend:
     runs-on: ubuntu-latest

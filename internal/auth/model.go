@@ -24,14 +24,14 @@ const (
 )
 
 type User struct {
-	ID           string `gorm:"primaryKey;size:32"`
-	TenantID     string `gorm:"index;size:32;not null"`
-	Email        string `gorm:"uniqueIndex;size:254;not null"`
-	PasswordHash string `gorm:"size:128;not null"`
-	OIDCIssuer   string `gorm:"size:512;uniqueIndex:ux_user_oidc" json:"-"`
-	OIDCSubject  string `gorm:"size:255;uniqueIndex:ux_user_oidc" json:"-"`
-	Role         string `gorm:"size:32;not null"`
-	Status       string `gorm:"size:16;not null"`
+	ID           string  `gorm:"primaryKey;size:32"`
+	TenantID     string  `gorm:"index;size:32;not null"`
+	Email        string  `gorm:"uniqueIndex;size:254;not null"`
+	PasswordHash string  `gorm:"size:128;not null"`
+	OIDCIssuer   *string `gorm:"size:512;uniqueIndex:ux_user_oidc" json:"-"`
+	OIDCSubject  *string `gorm:"size:255;uniqueIndex:ux_user_oidc" json:"-"`
+	Role         string  `gorm:"size:32;not null"`
+	Status       string  `gorm:"size:16;not null"`
 	CreatedAt    time.Time
 	UpdatedAt    time.Time
 }
