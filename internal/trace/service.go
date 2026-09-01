@@ -10,12 +10,14 @@ import (
 	"time"
 
 	"agentscope/internal/outbox"
+	"agentscope/internal/risk"
 )
 
 var (
 	ErrInvalidEventType = errors.New("invalid event type")
 	ErrEventTimeInvalid = errors.New("event timestamp is outside accepted window")
 	ErrPayloadTooLarge  = errors.New("event payload is too large")
+	ErrInvalidPayload   = errors.New("event payload is invalid")
 )
 
 type Service struct {
@@ -48,6 +50,11 @@ func (s *Service) Ingest(ctx context.Context, identity IngestContext, event Even
 	if len(event.Payload) > MaxPayloadBytes {
 		return IngestResult{}, ErrPayloadTooLarge
 	}
+	redactedPayload, err := risk.RedactPayload(event.Payload)
+	if err != nil {
+		return IngestResult{}, ErrInvalidPayload
+	}
+	event.Payload = redactedPayload
 	if atomicRepo, ok := s.repo.(atomicIngestRepository); ok {
 		return atomicRepo.IngestEventAtomic(ctx, identity, event)
 	}
