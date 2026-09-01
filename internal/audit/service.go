@@ -9,6 +9,10 @@ import (
 
 type Service struct{ repo Repository }
 
+func (s *Service) List(ctx context.Context, tenantID string, offset, limit int, action string) ([]Record, int64, error) {
+	return s.repo.List(ctx, tenantID, offset, limit, action)
+}
+
 func NewService(repo Repository) *Service { return &Service{repo: repo} }
 
 func (s *Service) Record(ctx context.Context, input RecordInput) error {

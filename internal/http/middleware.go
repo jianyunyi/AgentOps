@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
@@ -21,6 +22,14 @@ func RequestID() gin.HandlerFunc {
 		c.Set("request_id", requestID)
 		c.Header("X-Request-ID", requestID)
 		c.Next()
+	}
+}
+
+func RequestLogger() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		started := time.Now()
+		c.Next()
+		slog.Default().Info("http_request", "request_id", c.GetString("request_id"), "method", c.Request.Method, "path", c.Request.URL.Path, "status", c.Writer.Status(), "duration_ms", time.Since(started).Milliseconds(), "client_ip", c.ClientIP())
 	}
 }
 
@@ -51,6 +60,42 @@ func CORS(allowedOrigin string) gin.HandlerFunc {
 		}
 		c.Next()
 	}
+}
+
+func CSRF() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		token := ""
+		if cookie, err := c.Request.Cookie("agentscope_csrf"); err == nil {
+			token = cookie.Value
+		}
+		if token == "" {
+			token = newCSRFToken()
+			c.Writer.Header().Add("Set-Cookie", csrfCookie(token).String())
+		}
+		if c.Request.Method == http.MethodPost || c.Request.Method == http.MethodPut || c.Request.Method == http.MethodPatch || c.Request.Method == http.MethodDelete {
+			path := c.Request.URL.Path
+			exempt := path == "/api/v1/auth/login" || path == "/api/v1/auth/register" || path == "/api/v1/ingest/events"
+			_, sessionErr := c.Request.Cookie("agentscope_session")
+			hasSession := sessionErr == nil
+			if hasSession && !exempt && c.GetHeader("X-CSRF-Token") != token {
+				c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": gin.H{"code": "CSRF_FAILED", "message": "csrf token is invalid"}})
+				return
+			}
+		}
+		c.Next()
+	}
+}
+
+func csrfCookie(token string) *http.Cookie {
+	return &http.Cookie{Name: "agentscope_csrf", Value: token, Path: "/", MaxAge: 86400, HttpOnly: false, Secure: true, SameSite: http.SameSiteLaxMode}
+}
+
+func newCSRFToken() string {
+	buf := make([]byte, 24)
+	if _, err := rand.Read(buf); err != nil {
+		return "csrf-unavailable"
+	}
+	return hex.EncodeToString(buf)
 }
 
 type RateLimiter interface {

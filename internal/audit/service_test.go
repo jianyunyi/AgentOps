@@ -8,6 +8,23 @@ import (
 
 type fakeRepository struct{ records []Record }
 
+func (f *fakeRepository) List(_ context.Context, tenantID string, offset, limit int, action string) ([]Record, int64, error) {
+	var result []Record
+	for _, record := range f.records {
+		if record.TenantID == tenantID && (action == "" || record.Action == action) {
+			result = append(result, record)
+		}
+	}
+	if offset >= len(result) {
+		return []Record{}, int64(len(result)), nil
+	}
+	end := offset + limit
+	if end > len(result) {
+		end = len(result)
+	}
+	return result[offset:end], int64(len(result)), nil
+}
+
 func (f *fakeRepository) Append(_ context.Context, record *Record) error {
 	f.records = append(f.records, *record)
 	return nil

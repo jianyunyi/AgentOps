@@ -7,8 +7,13 @@ export class APIError extends Error {
 }
 
 export async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(path, { ...init, credentials: "include" });
-  const body = (await response.json()) as { data?: T; error?: { code: string; message: string } };
+  const headers = new Headers(init?.headers);
+  const csrf = typeof document === "undefined" ? "" : document.cookie.split(";").map((item) => item.trim()).find((item) => item.startsWith("agentscope_csrf="))?.split("=")[1] ?? "";
+  if (csrf && init?.method && init.method !== "GET") headers.set("X-CSRF-Token", decodeURIComponent(csrf));
+  const response = await fetch(path, { ...init, headers, credentials: "include" });
+  if (response.status === 204) return undefined as T;
+  const raw = await response.text();
+  const body = (raw ? JSON.parse(raw) : {}) as { data?: T; error?: { code: string; message: string } };
   if (!response.ok || !body.data) {
     throw new APIError(body.error?.code ?? "UNKNOWN_ERROR", body.error?.message ?? "Request failed", response.status);
   }

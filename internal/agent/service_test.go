@@ -10,6 +10,10 @@ import (
 
 type failingAuditRepository struct{}
 
+func (failingAuditRepository) List(context.Context, string, int, int, string) ([]audit.Record, int64, error) {
+	return nil, 0, errors.New("audit unavailable")
+}
+
 func (failingAuditRepository) Append(context.Context, *audit.Record) error {
 	return errors.New("audit unavailable")
 }

@@ -81,3 +81,33 @@ func TestRateLimitMiddlewareReturnsTooManyRequests(t *testing.T) {
 		t.Fatalf("unexpected rate limit response: %d %v", response.Code, response.Header())
 	}
 }
+
+func TestCSRFMiddlewareRejectsUnsafeCookieRequestWithoutMatchingToken(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	router.Use(apphttp.CSRF())
+	router.POST("/api/v1/agents", func(c *gin.Context) { c.Status(http.StatusNoContent) })
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/agents", nil)
+	request.AddCookie(&http.Cookie{Name: "agentscope_session", Value: "session"})
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+	if response.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want 403", response.Code)
+	}
+}
+
+func TestCSRFMiddlewareAllowsMatchingToken(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	router.Use(apphttp.CSRF())
+	router.POST("/api/v1/agents", func(c *gin.Context) { c.Status(http.StatusNoContent) })
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/agents", nil)
+	request.AddCookie(&http.Cookie{Name: "agentscope_session", Value: "session"})
+	request.AddCookie(&http.Cookie{Name: "agentscope_csrf", Value: "csrf"})
+	request.Header.Set("X-CSRF-Token", "csrf")
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+	if response.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want 204", response.Code)
+	}
+}

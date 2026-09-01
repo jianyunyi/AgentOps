@@ -17,6 +17,16 @@ type Service struct {
 	llm  StructuredAnalyzer
 }
 
+func (s *Service) List(ctx context.Context, tenantID string, offset, limit int, status string) ([]RiskEvent, int64, error) {
+	return s.repo.List(ctx, tenantID, offset, limit, status)
+}
+func (s *Service) Review(ctx context.Context, tenantID, id, status string) error {
+	if status != RiskOpen && status != "acknowledged" && status != "dismissed" && status != "resolved" {
+		return fmt.Errorf("invalid risk status")
+	}
+	return s.repo.UpdateStatus(ctx, tenantID, id, status)
+}
+
 func NewService(repo Repository, llm StructuredAnalyzer) *Service {
 	return &Service{repo: repo, llm: llm}
 }

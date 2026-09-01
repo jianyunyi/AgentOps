@@ -11,6 +11,25 @@ type memoryRiskRepository struct {
 	err    error
 }
 
+func (r *memoryRiskRepository) List(_ context.Context, tenantID string, offset, limit int, status string) ([]RiskEvent, int64, error) {
+	var result []RiskEvent
+	for _, event := range r.events {
+		if event.TenantID == tenantID && (status == "" || event.Status == status) {
+			result = append(result, *event)
+		}
+	}
+	return result, int64(len(result)), nil
+}
+func (r *memoryRiskRepository) UpdateStatus(_ context.Context, tenantID, id, status string) error {
+	for _, event := range r.events {
+		if event.TenantID == tenantID && event.ID == id {
+			event.Status = status
+			return nil
+		}
+	}
+	return nil
+}
+
 func (r *memoryRiskRepository) Create(_ context.Context, event *RiskEvent) error {
 	if r.err != nil {
 		return r.err
