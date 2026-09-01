@@ -31,11 +31,15 @@ func NewApplicationRouter(authService *auth.Service, agentService *agent.Service
 	console.POST("/agents/:id/revoke-key", auth.RequirePermission(auth.PermissionAgentWrite), agentHandler.RevokeKey)
 	console.GET("/audit-logs", auth.RequirePermission(auth.PermissionAuditRead), auditHandler.List)
 	console.GET("/members", auth.RequirePermission(auth.PermissionMemberRead), authHandler.ListMembers)
+	console.GET("/members/invitations", auth.RequirePermission(auth.PermissionMemberRead), authHandler.ListInvitations)
+	console.POST("/members/invitations", auth.RequirePermission(auth.PermissionMemberWrite), authHandler.CreateInvitation)
 	console.PATCH("/members/:id/role", auth.RequirePermission(auth.PermissionMemberWrite), authHandler.ChangeMemberRole)
 	console.POST("/members/:id/disable", auth.RequirePermission(auth.PermissionMemberWrite), authHandler.DisableMember)
+	console.POST("/members/:id/transfer-owner", auth.RequirePermission(auth.PermissionMemberWrite), authHandler.TransferOwner)
 	console.GET("/risk-events", auth.RequirePermission(auth.PermissionRiskRead), riskHandler.List)
 	console.POST("/risk-events/:id/review", auth.RequirePermission(auth.PermissionRiskReview), riskHandler.Review)
 	router.POST("/api/v1/auth/login", authHandler.Login)
 	router.POST("/api/v1/auth/register", authHandler.Register)
+	router.POST("/api/v1/auth/invitations/accept", authHandler.AcceptInvitation)
 	return router
 }

@@ -7,27 +7,39 @@ import (
 )
 
 type Config struct {
-	MySQLDSN      string
-	RedisAddr     string
-	HTTPAddr      string
-	SessionSecret string
-	WebOrigin     string
-	MaxBodyBytes  int64
-	LLMBaseURL    string
-	LLMAPIKey     string
-	LLMModel      string
+	MySQLDSN         string
+	RedisAddr        string
+	HTTPAddr         string
+	SessionSecret    string
+	WebOrigin        string
+	MaxBodyBytes     int64
+	LLMBaseURL       string
+	LLMAPIKey        string
+	LLMModel         string
+	OIDCIssuerURL    string
+	OIDCClientID     string
+	OIDCClientSecret string
+	OIDCRedirectURL  string
+	OIDCTenantID     string
+	OIDCDefaultRole  string
 }
 
 func Load() (Config, error) {
 	cfg := Config{
-		MySQLDSN:      os.Getenv("MYSQL_DSN"),
-		RedisAddr:     os.Getenv("REDIS_ADDR"),
-		HTTPAddr:      os.Getenv("HTTP_ADDR"),
-		SessionSecret: os.Getenv("SESSION_SECRET"),
-		WebOrigin:     os.Getenv("WEB_ORIGIN"),
-		LLMBaseURL:    os.Getenv("LLM_BASE_URL"),
-		LLMAPIKey:     os.Getenv("LLM_API_KEY"),
-		LLMModel:      os.Getenv("LLM_MODEL"),
+		MySQLDSN:         os.Getenv("MYSQL_DSN"),
+		RedisAddr:        os.Getenv("REDIS_ADDR"),
+		HTTPAddr:         os.Getenv("HTTP_ADDR"),
+		SessionSecret:    os.Getenv("SESSION_SECRET"),
+		WebOrigin:        os.Getenv("WEB_ORIGIN"),
+		LLMBaseURL:       os.Getenv("LLM_BASE_URL"),
+		LLMAPIKey:        os.Getenv("LLM_API_KEY"),
+		LLMModel:         os.Getenv("LLM_MODEL"),
+		OIDCIssuerURL:    os.Getenv("OIDC_ISSUER_URL"),
+		OIDCClientID:     os.Getenv("OIDC_CLIENT_ID"),
+		OIDCClientSecret: os.Getenv("OIDC_CLIENT_SECRET"),
+		OIDCRedirectURL:  os.Getenv("OIDC_REDIRECT_URL"),
+		OIDCTenantID:     os.Getenv("OIDC_TENANT_ID"),
+		OIDCDefaultRole:  os.Getenv("OIDC_DEFAULT_ROLE"),
 	}
 	if cfg.MySQLDSN == "" {
 		return Config{}, errors.New("MYSQL_DSN is required")

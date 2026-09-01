@@ -22,6 +22,7 @@ type migration struct {
 var migrations = []migration{
 	{Version: 1, Name: "initial_schema", Apply: migrateInitialSchema},
 	{Version: 2, Name: "p0_consistency_and_credentials", Apply: migrateP0Schema},
+	{Version: 3, Name: "phase3_members_and_sso", Apply: migratePhase3Schema},
 }
 
 // Migrate applies each schema version exactly once. Production deployments can
@@ -56,6 +57,10 @@ func migrateInitialSchema(db *gorm.DB) error {
 
 func migrateP0Schema(db *gorm.DB) error {
 	return db.AutoMigrate(&agent.AgentCredential{}, &outbox.Event{}, &risk.RiskEvent{})
+}
+
+func migratePhase3Schema(db *gorm.DB) error {
+	return db.AutoMigrate(&auth.MemberInvitation{})
 }
 
 func MigrationVersions() []uint64 {

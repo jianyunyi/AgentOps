@@ -42,7 +42,15 @@ func main() {
 	auditService := audit.NewService(audit.NewGORMRepository(db))
 	riskService := risk.NewService(risk.NewGORMRepository(db), nil)
 	agentService := agent.NewServiceWithAudit(agentRepo, auditService)
-	authService := auth.NewService(auth.NewGORMRepository(db), cfg.SessionSecret)
+	authRepo := auth.NewGORMRepository(db)
+	authService := auth.NewServiceWithAudit(authRepo, cfg.SessionSecret, auditService)
+	var oidcService *auth.OIDCService
+	if cfg.OIDCIssuerURL != "" {
+		oidcService, err = auth.NewOIDCService(ctx, auth.OIDCConfig{IssuerURL: cfg.OIDCIssuerURL, ClientID: cfg.OIDCClientID, ClientSecret: cfg.OIDCClientSecret, RedirectURL: cfg.OIDCRedirectURL, TenantID: cfg.OIDCTenantID, DefaultRole: cfg.OIDCDefaultRole, StateSecret: cfg.SessionSecret})
+		if err != nil {
+			log.Printf("oidc disabled: %v", err)
+		}
+	}
 	traceRepo := trace.NewGORMRepository(db)
 	outboxService := outbox.NewService(outbox.NewGORMRepository(db))
 	traceService := trace.NewServiceWithOutbox(traceRepo, outboxService)
@@ -59,6 +67,9 @@ func main() {
 			}
 			return 120, time.Minute
 		}))
+	authHandler := auth.NewHandlerWithOIDC(authService, oidcService)
+	router.GET("/api/v1/auth/oidc/login", authHandler.OIDCLogin)
+	router.GET("/api/v1/auth/oidc/callback", authHandler.OIDCCallback)
 	router.GET("/metrics", gin.WrapF(requestMetrics.Handler()))
 	sqlDB, err := db.DB()
 	if err != nil {
