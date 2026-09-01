@@ -31,7 +31,7 @@ func (h *Handler) Login(c *gin.Context) {
 		c.JSON(status, gin.H{"error": gin.H{"code": "INVALID_CREDENTIALS", "message": "email or password is invalid"}})
 		return
 	}
-	c.SetCookie("agentscope_session", session.ID, int(timeUntil(session.ExpiresAt)), "/", "", true, true)
+	setSessionCookie(c, session.ID, session.ExpiresAt)
 	c.JSON(http.StatusOK, gin.H{"data": gin.H{"user_id": session.UserID, "tenant_id": session.TenantID}})
 }
 
@@ -54,7 +54,7 @@ func (h *Handler) Register(c *gin.Context) {
 		c.JSON(status, gin.H{"error": gin.H{"code": "REGISTRATION_FAILED", "message": "registration could not be completed"}})
 		return
 	}
-	c.SetCookie("agentscope_session", session.ID, int(timeUntil(session.ExpiresAt)), "/", "", true, true)
+	setSessionCookie(c, session.ID, session.ExpiresAt)
 	c.JSON(http.StatusCreated, gin.H{"data": gin.H{"user_id": session.UserID, "tenant_id": session.TenantID, "role": session.Role}})
 }
 
@@ -70,6 +70,17 @@ func (h *Handler) Me(c *gin.Context) {
 		}
 	}
 	c.JSON(http.StatusOK, gin.H{"data": gin.H{"user_id": userID, "tenant_id": tenantID, "role": roleName, "permissions": permissions}})
+}
+
+func setSessionCookie(c *gin.Context, sessionID string, expiresAt time.Time) {
+	cookie := &http.Cookie{Name: "agentscope_session", Value: sessionID, Path: "/", MaxAge: timeUntil(expiresAt), HttpOnly: true, Secure: true, SameSite: http.SameSiteLaxMode}
+	c.Header("Set-Cookie", cookie.String())
+}
+
+func (h *Handler) Logout(c *gin.Context) {
+	cookie := &http.Cookie{Name: "agentscope_session", Value: "", Path: "/", MaxAge: -1, HttpOnly: true, Secure: true, SameSite: http.SameSiteLaxMode}
+	c.Header("Set-Cookie", cookie.String())
+	c.Status(http.StatusNoContent)
 }
 
 func (h *Handler) Authenticate(c *gin.Context) {

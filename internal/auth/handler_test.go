@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -28,6 +29,20 @@ func TestLoginSetsHttpOnlySessionCookie(t *testing.T) {
 	cookies := res.Result().Cookies()
 	if len(cookies) != 1 || cookies[0].Name != "agentscope_session" || !cookies[0].HttpOnly {
 		t.Fatalf("expected HttpOnly session cookie, got %+v", cookies)
+	}
+	if cookies[0].Secure != true || cookies[0].SameSite != http.SameSiteLaxMode {
+		t.Fatalf("session cookie security flags = secure:%v sameSite:%v", cookies[0].Secure, cookies[0].SameSite)
+	}
+}
+
+func TestLogoutClearsSessionCookie(t *testing.T) {
+	handler := NewHandler(NewService(&fakeUserRepository{}, "test-secret"))
+	gin.SetMode(gin.TestMode)
+	context, _ := gin.CreateTestContext(httptest.NewRecorder())
+	handler.Logout(context)
+	cookies := context.Writer.Header().Values("Set-Cookie")
+	if len(cookies) != 1 || !strings.Contains(cookies[0], "Max-Age=0") {
+		t.Fatalf("expected expired session cookie, got %v", cookies)
 	}
 }
 
