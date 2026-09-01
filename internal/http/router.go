@@ -11,14 +11,16 @@ func NewRouter(traceService *trace.Service, traceQuery trace.QueryRepository, au
 	return trace.NewRouter(traceService, traceQuery, authenticator)
 }
 
-func NewApplicationRouter(authService *auth.Service, agentService *agent.Service, traceService *trace.Service, traceQuery trace.QueryRepository) *gin.Engine {
+func NewApplicationRouter(authService *auth.Service, agentService *agent.Service, traceService *trace.Service, traceQuery trace.QueryRepository, middleware ...gin.HandlerFunc) *gin.Engine {
 	router := trace.NewRouter(traceService, traceQuery, agentService)
+	router.Use(middleware...)
 	router.Use(auth.OptionalAuthenticate(authService))
 	authHandler := auth.NewHandler(authService)
 	agentHandler := agent.NewHandler(agentService)
 	console := router.Group("/api/v1")
 	console.Use(authHandler.Authenticate)
 	console.GET("/auth/me", authHandler.Me)
+	console.POST("/auth/logout", authHandler.Logout)
 	console.POST("/agents", auth.RequirePermission(auth.PermissionAgentWrite), agentHandler.Create)
 	console.GET("/agents", auth.RequirePermission(auth.PermissionAgentRead), agentHandler.List)
 	console.POST("/agents/:id/rotate-key", auth.RequirePermission(auth.PermissionAgentWrite), agentHandler.RotateKey)
