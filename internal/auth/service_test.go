@@ -11,6 +11,37 @@ type fakeUserRepository struct {
 	registeredTenantID string
 }
 
+func (f *fakeUserRepository) ListMembers(_ context.Context, tenantID string) ([]User, error) {
+	var result []User
+	for _, user := range f.users {
+		if user.TenantID == tenantID {
+			copy := *user
+			result = append(result, copy)
+		}
+	}
+	return result, nil
+}
+
+func (f *fakeUserRepository) UpdateMemberRole(_ context.Context, tenantID, memberID, role string) error {
+	for _, user := range f.users {
+		if user.ID == memberID && user.TenantID == tenantID {
+			user.Role = role
+			return nil
+		}
+	}
+	return ErrUserNotFound
+}
+
+func (f *fakeUserRepository) DisableMember(_ context.Context, tenantID, memberID string) error {
+	for _, user := range f.users {
+		if user.ID == memberID && user.TenantID == tenantID {
+			user.Status = UserDisabled
+			return nil
+		}
+	}
+	return ErrUserNotFound
+}
+
 func (f *fakeUserRepository) FindByEmail(_ context.Context, email string) (*User, error) {
 	user, ok := f.users[email]
 	if !ok {
@@ -88,6 +119,26 @@ func TestPermissionRequiresRoleCapability(t *testing.T) {
 	}
 	if HasPermission(RoleViewer, PermissionRiskReview) {
 		t.Fatal("viewer must not be allowed to review risks")
+	}
+	if !HasPermission(RoleAdmin, PermissionMemberRead) || !HasPermission(RoleAdmin, PermissionMemberWrite) {
+		t.Fatal("admin must be allowed to manage members")
+	}
+}
+
+func TestMemberServiceValidatesOwnerBoundaries(t *testing.T) {
+	repo := &fakeUserRepository{users: map[string]*User{
+		"owner@example.com": {ID: "usr_owner", TenantID: "ten_001", Role: RoleOwner, Status: UserActive},
+		"dev@example.com":   {ID: "usr_dev", TenantID: "ten_001", Role: RoleDeveloper, Status: UserActive},
+	}}
+	svc := NewService(repo, "secret")
+	if err := svc.ChangeMemberRole(context.Background(), "ten_001", "usr_owner", "usr_owner", RoleViewer); err == nil {
+		t.Fatal("must not change owner role")
+	}
+	if err := svc.DisableMember(context.Background(), "ten_001", "usr_owner", "usr_owner"); err == nil {
+		t.Fatal("must not disable self")
+	}
+	if err := svc.ChangeMemberRole(context.Background(), "ten_001", "usr_owner", "usr_dev", RoleAuditor); err != nil {
+		t.Fatalf("ChangeMemberRole() error = %v", err)
 	}
 }
 

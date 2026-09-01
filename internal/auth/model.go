@@ -19,6 +19,7 @@ const (
 	PermissionRiskRead    = "risk:read"
 	PermissionRiskReview  = "risk:review"
 	PermissionAuditRead   = "audit:read"
+	PermissionMemberRead  = "member:read"
 	PermissionMemberWrite = "member:write"
 )
 

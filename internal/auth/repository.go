@@ -18,6 +18,37 @@ type Repository interface {
 	CreateSession(ctx context.Context, session *Session) error
 	FindSession(ctx context.Context, sessionID string) (*Session, error)
 	RegisterTenantOwner(ctx context.Context, tenantName string, user *User) (string, error)
+	ListMembers(ctx context.Context, tenantID string) ([]User, error)
+	UpdateMemberRole(ctx context.Context, tenantID, memberID, role string) error
+	DisableMember(ctx context.Context, tenantID, memberID string) error
+}
+
+func (r *GORMRepository) ListMembers(ctx context.Context, tenantID string) ([]User, error) {
+	var users []User
+	err := r.db.WithContext(ctx).Select("id", "tenant_id", "email", "role", "status", "created_at", "updated_at").Where("tenant_id = ?", tenantID).Order("created_at asc").Find(&users).Error
+	return users, err
+}
+
+func (r *GORMRepository) UpdateMemberRole(ctx context.Context, tenantID, memberID, role string) error {
+	result := r.db.WithContext(ctx).Model(&User{}).Where("id = ? AND tenant_id = ? AND status = ? AND role <> ?", memberID, tenantID, UserActive, RoleOwner).Update("role", role)
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return ErrUserNotFound
+	}
+	return nil
+}
+
+func (r *GORMRepository) DisableMember(ctx context.Context, tenantID, memberID string) error {
+	result := r.db.WithContext(ctx).Model(&User{}).Where("id = ? AND tenant_id = ? AND status = ? AND role <> ?", memberID, tenantID, UserActive, RoleOwner).Update("status", UserDisabled)
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return ErrUserNotFound
+	}
+	return nil
 }
 
 type GORMRepository struct{ db *gorm.DB }

@@ -13,6 +13,7 @@ import (
 
 var ErrInvalidCredentials = errors.New("invalid credentials")
 var ErrInvalidRegistration = errors.New("invalid registration")
+var ErrInvalidMemberOperation = errors.New("invalid member operation")
 
 type Service struct {
 	repo          Repository
@@ -97,12 +98,39 @@ func HasPermission(role, permission string) bool {
 		return true
 	}
 	permissions := map[string]map[string]bool{
-		RoleAdmin:     {PermissionAgentRead: true, PermissionAgentWrite: true, PermissionRiskRead: true},
+		RoleAdmin:     {PermissionAgentRead: true, PermissionAgentWrite: true, PermissionRiskRead: true, PermissionMemberRead: true, PermissionMemberWrite: true},
 		RoleDeveloper: {PermissionAgentRead: true, PermissionRiskRead: true},
 		RoleAuditor:   {PermissionRiskRead: true, PermissionRiskReview: true, PermissionAuditRead: true},
 		RoleViewer:    {PermissionAgentRead: true, PermissionRiskRead: true},
 	}
 	return permissions[role][permission]
+}
+
+func (s *Service) ListMembers(ctx context.Context, tenantID string) ([]User, error) {
+	return s.repo.ListMembers(ctx, tenantID)
+}
+
+func (s *Service) ChangeMemberRole(ctx context.Context, tenantID, actorID, memberID, role string) error {
+	if tenantID == "" || actorID == "" || memberID == "" || actorID == memberID || !validMemberRole(role) {
+		return ErrInvalidMemberOperation
+	}
+	return s.repo.UpdateMemberRole(ctx, tenantID, memberID, role)
+}
+
+func (s *Service) DisableMember(ctx context.Context, tenantID, actorID, memberID string) error {
+	if tenantID == "" || actorID == "" || memberID == "" || actorID == memberID {
+		return ErrInvalidMemberOperation
+	}
+	return s.repo.DisableMember(ctx, tenantID, memberID)
+}
+
+func validMemberRole(role string) bool {
+	switch role {
+	case RoleAdmin, RoleDeveloper, RoleAuditor, RoleViewer:
+		return true
+	default:
+		return false
+	}
 }
 
 func randomSessionID() (string, error) {

@@ -11,6 +11,14 @@ import (
 
 type Handler struct{ service *Service }
 
+type MemberResponse struct {
+	ID        string    `json:"id"`
+	Email     string    `json:"email"`
+	Role      string    `json:"role"`
+	Status    string    `json:"status"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
 func NewHandler(service *Service) *Handler { return &Handler{service: service} }
 
 func (h *Handler) Login(c *gin.Context) {
@@ -64,7 +72,7 @@ func (h *Handler) Me(c *gin.Context) {
 	role, _ := c.Get("user_role")
 	roleName, _ := role.(string)
 	permissions := []string{}
-	for _, permission := range []string{PermissionAgentRead, PermissionAgentWrite, PermissionRiskRead, PermissionRiskReview, PermissionAuditRead} {
+	for _, permission := range []string{PermissionAgentRead, PermissionAgentWrite, PermissionRiskRead, PermissionRiskReview, PermissionAuditRead, PermissionMemberRead, PermissionMemberWrite} {
 		if HasPermission(roleName, permission) {
 			permissions = append(permissions, permission)
 		}
@@ -80,6 +88,55 @@ func setSessionCookie(c *gin.Context, sessionID string, expiresAt time.Time) {
 func (h *Handler) Logout(c *gin.Context) {
 	cookie := &http.Cookie{Name: "agentscope_session", Value: "", Path: "/", MaxAge: -1, HttpOnly: true, Secure: true, SameSite: http.SameSiteLaxMode}
 	c.Header("Set-Cookie", cookie.String())
+	c.Status(http.StatusNoContent)
+}
+
+func (h *Handler) ListMembers(c *gin.Context) {
+	tenantID, _ := c.Get("tenant_id")
+	members, err := h.service.ListMembers(c.Request.Context(), tenantID.(string))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "INTERNAL_ERROR", "message": "failed to query members"}})
+		return
+	}
+	result := make([]MemberResponse, 0, len(members))
+	for _, member := range members {
+		result = append(result, MemberResponse{ID: member.ID, Email: member.Email, Role: member.Role, Status: member.Status, CreatedAt: member.CreatedAt})
+	}
+	c.JSON(http.StatusOK, gin.H{"data": result})
+}
+
+func (h *Handler) ChangeMemberRole(c *gin.Context) {
+	tenantID, _ := c.Get("tenant_id")
+	actorID, _ := c.Get("user_id")
+	var request struct {
+		Role string `json:"role"`
+	}
+	if err := c.ShouldBindJSON(&request); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_REQUEST", "message": "role is required"}})
+		return
+	}
+	if err := h.service.ChangeMemberRole(c.Request.Context(), tenantID.(string), actorID.(string), c.Param("id"), request.Role); err != nil {
+		status := http.StatusBadRequest
+		if errors.Is(err, ErrUserNotFound) {
+			status = http.StatusNotFound
+		}
+		c.JSON(status, gin.H{"error": gin.H{"code": "MEMBER_UPDATE_FAILED", "message": "member role could not be updated"}})
+		return
+	}
+	c.Status(http.StatusNoContent)
+}
+
+func (h *Handler) DisableMember(c *gin.Context) {
+	tenantID, _ := c.Get("tenant_id")
+	actorID, _ := c.Get("user_id")
+	if err := h.service.DisableMember(c.Request.Context(), tenantID.(string), actorID.(string), c.Param("id")); err != nil {
+		status := http.StatusBadRequest
+		if errors.Is(err, ErrUserNotFound) {
+			status = http.StatusNotFound
+		}
+		c.JSON(status, gin.H{"error": gin.H{"code": "MEMBER_DISABLE_FAILED", "message": "member could not be disabled"}})
+		return
+	}
 	c.Status(http.StatusNoContent)
 }
 
