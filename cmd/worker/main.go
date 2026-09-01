@@ -27,6 +27,11 @@ func main() {
 	llm := risk.StructuredAnalyzer(nil)
 	if cfg.LLMBaseURL != "" {
 		llm = &risk.OpenAICompatibleClient{BaseURL: cfg.LLMBaseURL, APIKey: cfg.LLMAPIKey, Model: cfg.LLMModel}
+		healthCtx, healthCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		if err := llm.(*risk.OpenAICompatibleClient).Health(healthCtx); err != nil {
+			log.Printf("local llm health check failed; rules fallback remains active: %v", err)
+		}
+		healthCancel()
 	}
 	policyService := policy.NewService(policy.NewGORMRepository(db))
 	riskService := risk.NewServiceWithPolicy(risk.NewGORMRepository(db), llm, policyService)

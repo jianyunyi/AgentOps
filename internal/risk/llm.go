@@ -22,6 +22,29 @@ type OpenAICompatibleClient struct {
 	Client  *http.Client
 }
 
+func (c *OpenAICompatibleClient) Health(ctx context.Context) error {
+	client := c.Client
+	if client == nil {
+		client = &http.Client{Timeout: 5 * time.Second}
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(c.BaseURL, "/")+"/models", nil)
+	if err != nil {
+		return err
+	}
+	if c.APIKey != "" {
+		req.Header.Set("authorization", "Bearer "+c.APIKey)
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fmt.Errorf("llm health status %d", resp.StatusCode)
+	}
+	return nil
+}
+
 func (c *OpenAICompatibleClient) Analyze(ctx context.Context, input string) (LLMResult, error) {
 	requestBody := map[string]any{
 		"model":           c.Model,

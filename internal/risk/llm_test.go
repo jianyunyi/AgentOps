@@ -24,3 +24,16 @@ func TestOpenAICompatibleClientDecodesStructuredResult(t *testing.T) {
 		t.Fatalf("unexpected result: %+v", result)
 	}
 }
+
+func TestOpenAICompatibleClientHealth(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/models" {
+			t.Fatalf("health path = %s", r.URL.Path)
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+	if err := (&OpenAICompatibleClient{BaseURL: server.URL}).Health(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+}

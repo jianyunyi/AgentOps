@@ -89,5 +89,8 @@ func Load() (Config, error) {
 	if len(cfg.SessionSecret) < 32 {
 		return Config{}, errors.New("SESSION_SECRET must be at least 32 characters")
 	}
+	if cfg.LLMBaseURL != "" && cfg.LLMModel == "" {
+		return Config{}, errors.New("LLM_MODEL is required when LLM_BASE_URL is configured")
+	}
 	return cfg, nil
 }
