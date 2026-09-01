@@ -21,6 +21,8 @@ const (
 	PermissionAuditRead   = "audit:read"
 	PermissionMemberRead  = "member:read"
 	PermissionMemberWrite = "member:write"
+	PermissionPolicyRead  = "policy:read"
+	PermissionPolicyWrite = "policy:write"
 )
 
 type User struct {

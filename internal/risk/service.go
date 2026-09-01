@@ -6,6 +6,8 @@ import (
 	"encoding/hex"
 	"fmt"
 	"time"
+
+	"agentscope/internal/policy"
 )
 
 type StructuredAnalyzer interface {
@@ -13,8 +15,13 @@ type StructuredAnalyzer interface {
 }
 
 type Service struct {
-	repo Repository
-	llm  StructuredAnalyzer
+	repo     Repository
+	llm      StructuredAnalyzer
+	policies policyProvider
+}
+
+type policyProvider interface {
+	Active(context.Context, string) (*policy.Policy, error)
 }
 
 func (s *Service) List(ctx context.Context, tenantID string, offset, limit int, status string) ([]RiskEvent, int64, error) {
@@ -31,9 +38,28 @@ func NewService(repo Repository, llm StructuredAnalyzer) *Service {
 	return &Service{repo: repo, llm: llm}
 }
 
+func NewServiceWithPolicy(repo Repository, llm StructuredAnalyzer, policies policyProvider) *Service {
+	return &Service{repo: repo, llm: llm, policies: policies}
+}
+
 func (s *Service) AnalyzeAndPersist(ctx context.Context, tenantID, traceID, spanID, input string) (Result, error) {
+	configured := &policy.Policy{RulesEnabled: true, LLMEnabled: true, MaxInputBytes: 64 * 1024}
+	if s.policies != nil {
+		if active, err := s.policies.Active(ctx, tenantID); err == nil && active != nil {
+			configured = active
+		}
+	}
+	if configured.MaxInputBytes < 1024 {
+		configured.MaxInputBytes = 1024
+	}
+	if len(input) > configured.MaxInputBytes {
+		input = input[:configured.MaxInputBytes]
+	}
 	result := Analyze(input)
-	if s.llm != nil {
+	if !configured.RulesEnabled {
+		result = Result{Redacted: result.Redacted}
+	}
+	if s.llm != nil && configured.LLMEnabled {
 		llmResult, err := s.llm.Analyze(ctx, result.Redacted)
 		if err == nil {
 			result = mergeLLMResult(result, llmResult)

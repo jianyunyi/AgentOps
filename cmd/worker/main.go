@@ -10,6 +10,7 @@ import (
 	"agentscope/internal/platform/config"
 	"agentscope/internal/platform/database"
 	platformredis "agentscope/internal/platform/redis"
+	"agentscope/internal/policy"
 	"agentscope/internal/risk"
 	"agentscope/internal/worker"
 )
@@ -27,7 +28,8 @@ func main() {
 	if cfg.LLMBaseURL != "" {
 		llm = &risk.OpenAICompatibleClient{BaseURL: cfg.LLMBaseURL, APIKey: cfg.LLMAPIKey, Model: cfg.LLMModel}
 	}
-	riskService := risk.NewService(risk.NewGORMRepository(db), llm)
+	policyService := policy.NewService(policy.NewGORMRepository(db))
+	riskService := risk.NewServiceWithPolicy(risk.NewGORMRepository(db), llm, policyService)
 	client := platformredis.NewClient(cfg.RedisAddr)
 	consumer := worker.NewStreamConsumer(client)
 	processor := worker.NewAnalysisProcessor(3, func(ctx context.Context, message worker.AnalysisMessage) error {
@@ -53,9 +55,13 @@ func main() {
 	select {
 	case err := <-outboxErrors:
 		cancel()
-		if err != nil && err != context.Canceled { log.Fatal(err) }
+		if err != nil && err != context.Canceled {
+			log.Fatal(err)
+		}
 	case err := <-analysisErrors:
 		cancel()
-		if err != nil && err != context.Canceled { log.Fatal(err) }
+		if err != nil && err != context.Canceled {
+			log.Fatal(err)
+		}
 	}
 }

@@ -7,6 +7,7 @@ import (
 	"agentscope/internal/audit"
 	"agentscope/internal/auth"
 	"agentscope/internal/outbox"
+	"agentscope/internal/policy"
 	"agentscope/internal/risk"
 	"agentscope/internal/tenant"
 	"agentscope/internal/trace"
@@ -23,6 +24,7 @@ var migrations = []migration{
 	{Version: 1, Name: "initial_schema", Apply: migrateInitialSchema},
 	{Version: 2, Name: "p0_consistency_and_credentials", Apply: migrateP0Schema},
 	{Version: 3, Name: "phase3_members_and_sso", Apply: migratePhase3Schema},
+	{Version: 4, Name: "phase5_ai_policies", Apply: migratePhase5Schema},
 }
 
 // Migrate applies each schema version exactly once. Production deployments can
@@ -62,6 +64,8 @@ func migrateP0Schema(db *gorm.DB) error {
 func migratePhase3Schema(db *gorm.DB) error {
 	return db.AutoMigrate(&auth.MemberInvitation{})
 }
+
+func migratePhase5Schema(db *gorm.DB) error { return db.AutoMigrate(&policy.Policy{}) }
 
 func MigrationVersions() []uint64 {
 	versions := make([]uint64, len(migrations))

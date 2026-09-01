@@ -16,6 +16,7 @@ import (
 	"agentscope/internal/auth"
 	apihttp "agentscope/internal/http"
 	"agentscope/internal/platform/database"
+	"agentscope/internal/policy"
 	"agentscope/internal/risk"
 	"agentscope/internal/tenant"
 	"agentscope/internal/trace"
@@ -62,7 +63,8 @@ func TestMemberAPIInvitationAndOwnerTransfer(t *testing.T) {
 	riskService := risk.NewService(risk.NewGORMRepository(db), nil)
 	traceRepo := trace.NewGORMRepository(db)
 	traceService := trace.NewService(traceRepo)
-	router := apihttp.NewApplicationRouter(authService, agentService, auditService, riskService, traceService, traceRepo)
+	policyService := policy.NewService(policy.NewGORMRepository(db))
+	router := apihttp.NewApplicationRouter(authService, agentService, auditService, riskService, traceService, traceRepo, policyService)
 	request := func(method, path, body string) *httptest.ResponseRecorder {
 		req := httptest.NewRequest(method, path, strings.NewReader(body))
 		req.Header.Set("Content-Type", "application/json")

@@ -105,7 +105,7 @@ func HasPermission(role, permission string) bool {
 		return true
 	}
 	permissions := map[string]map[string]bool{
-		RoleAdmin:     {PermissionAgentRead: true, PermissionAgentWrite: true, PermissionRiskRead: true, PermissionMemberRead: true, PermissionMemberWrite: true},
+		RoleAdmin:     {PermissionAgentRead: true, PermissionAgentWrite: true, PermissionRiskRead: true, PermissionMemberRead: true, PermissionMemberWrite: true, PermissionPolicyRead: true, PermissionPolicyWrite: true},
 		RoleDeveloper: {PermissionAgentRead: true, PermissionRiskRead: true},
 		RoleAuditor:   {PermissionRiskRead: true, PermissionRiskReview: true, PermissionAuditRead: true},
 		RoleViewer:    {PermissionAgentRead: true, PermissionRiskRead: true},

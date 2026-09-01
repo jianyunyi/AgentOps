@@ -19,6 +19,7 @@ import (
 	"agentscope/internal/platform/metrics"
 	platformratelimit "agentscope/internal/platform/ratelimit"
 	platformredis "agentscope/internal/platform/redis"
+	"agentscope/internal/policy"
 	"agentscope/internal/risk"
 	"agentscope/internal/trace"
 	"github.com/gin-gonic/gin"
@@ -43,7 +44,8 @@ func main() {
 	redisClient := platformredis.NewClient(cfg.RedisAddr)
 	agentRepo := agent.NewGORMRepository(db)
 	auditService := audit.NewService(audit.NewGORMRepository(db))
-	riskService := risk.NewService(risk.NewGORMRepository(db), nil)
+	policyService := policy.NewService(policy.NewGORMRepository(db))
+	riskService := risk.NewServiceWithPolicy(risk.NewGORMRepository(db), nil, policyService)
 	agentService := agent.NewServiceWithAudit(agentRepo, auditService)
 	authRepo := auth.NewGORMRepository(db)
 	authService := auth.NewServiceWithAudit(authRepo, cfg.SessionSecret, auditService)
@@ -59,7 +61,7 @@ func main() {
 	traceService := trace.NewServiceWithOutbox(traceRepo, outboxService)
 	rateLimiter := platformratelimit.New(platformratelimit.NewRedisStore(redisClient))
 	requestMetrics := metrics.New()
-	router := apihttp.NewApplicationRouter(authService, agentService, auditService, riskService, traceService, traceRepo,
+	router := apihttp.NewApplicationRouter(authService, agentService, auditService, riskService, traceService, traceRepo, policyService,
 		requestMetrics.Middleware(), apihttp.RequestID(), apihttp.RequestLogger(), apihttp.BodyLimit(cfg.MaxBodyBytes), apihttp.CORS(cfg.WebOrigin), apihttp.CSRF(),
 		apihttp.RateLimitPolicy(rateLimiter, func(c *gin.Context) string { return c.ClientIP() + ":" + c.Request.Method + ":" + c.Request.URL.Path }, func(c *gin.Context) (int64, time.Duration) {
 			if c.Request.URL.Path == "/api/v1/auth/login" || c.Request.URL.Path == "/api/v1/auth/register" {

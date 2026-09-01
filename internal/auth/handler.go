@@ -80,7 +80,7 @@ func (h *Handler) Me(c *gin.Context) {
 	role, _ := c.Get("user_role")
 	roleName, _ := role.(string)
 	permissions := []string{}
-	for _, permission := range []string{PermissionAgentRead, PermissionAgentWrite, PermissionRiskRead, PermissionRiskReview, PermissionAuditRead, PermissionMemberRead, PermissionMemberWrite} {
+	for _, permission := range []string{PermissionAgentRead, PermissionAgentWrite, PermissionRiskRead, PermissionRiskReview, PermissionAuditRead, PermissionMemberRead, PermissionMemberWrite, PermissionPolicyRead, PermissionPolicyWrite} {
 		if HasPermission(roleName, permission) {
 			permissions = append(permissions, permission)
 		}

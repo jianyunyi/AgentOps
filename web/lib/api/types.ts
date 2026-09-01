@@ -56,3 +56,4 @@ export interface CurrentUser {
 export interface AuditRecord { id: number; tenant_id: string; actor_id: string; action: string; resource_type: string; resource_id: string; before?: unknown; after?: unknown; request_id?: string; created_at: string; }
 export interface RiskEvent { id: string; tenant_id: string; trace_id: string; span_id: string; rule_code: string; risk_type: string; risk_level: string; detector: string; reason: string; evidence_redacted: string; status: string; created_at: string; }
 export interface Member { id: string; email: string; role: string; status: string; created_at: string; }
+export interface Policy { id: string; tenant_id: string; name: string; version: number; enabled: boolean; rules_enabled: boolean; llm_enabled: boolean; max_input_bytes: number; created_by: string; created_at: string; }
