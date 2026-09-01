@@ -34,8 +34,11 @@ type Identity struct {
 }
 
 type Service struct {
-	repo  Repository
-	audit *audit.Service
+	repo         Repository
+	audit        *audit.Service
+	nonceStore   NonceStore
+	replayWindow time.Duration
+	nonceTTL     time.Duration
 }
 
 func NewService(repo Repository) *Service {
@@ -44,6 +47,14 @@ func NewService(repo Repository) *Service {
 
 func NewServiceWithAudit(repo Repository, auditService *audit.Service) *Service {
 	return &Service{repo: repo, audit: auditService}
+}
+
+func NewServiceWithNonceStore(repo Repository, nonceStore NonceStore, replayWindow, nonceTTL time.Duration) *Service {
+	return &Service{repo: repo, nonceStore: nonceStore, replayWindow: normalizeReplayWindow(replayWindow), nonceTTL: normalizeNonceTTL(nonceTTL)}
+}
+
+func NewServiceWithAuditAndNonceStore(repo Repository, auditService *audit.Service, nonceStore NonceStore, replayWindow, nonceTTL time.Duration) *Service {
+	return &Service{repo: repo, audit: auditService, nonceStore: nonceStore, replayWindow: normalizeReplayWindow(replayWindow), nonceTTL: normalizeNonceTTL(nonceTTL)}
 }
 
 func (s *Service) CreateAgent(ctx context.Context, input CreateAgentInput) (CreateAgentResult, error) {
@@ -135,6 +146,59 @@ func (s *Service) AuthenticateAPIKey(ctx context.Context, rawKey string) (Identi
 		}
 	}
 	return Identity{TenantID: credential.TenantID, AgentID: credential.AgentID}, nil
+}
+
+func (s *Service) AuthenticateIngestRequest(ctx context.Context, rawKey string, metadata AuthenticationMetadata) (Identity, error) {
+	if !validAuthenticationMetadata(metadata, normalizeReplayWindow(s.replayWindow)) {
+		return Identity{}, ErrInvalidAgentRequest
+	}
+	identity, err := s.AuthenticateAPIKey(ctx, rawKey)
+	if err != nil {
+		return Identity{}, err
+	}
+	if s.nonceStore == nil {
+		return Identity{}, ErrNonceStoreUnavailable
+	}
+	claimed, err := s.nonceStore.Claim(ctx, identity.TenantID, identity.AgentID, metadata.Nonce, normalizeNonceTTL(s.nonceTTL))
+	if err != nil {
+		return Identity{}, ErrNonceStoreUnavailable
+	}
+	if !claimed {
+		return Identity{}, ErrReplayDetected
+	}
+	return identity, nil
+}
+
+func validAuthenticationMetadata(metadata AuthenticationMetadata, replayWindow time.Duration) bool {
+	if metadata.Timestamp <= 0 || replayWindow <= 0 {
+		return false
+	}
+	if delta := time.Now().Unix() - metadata.Timestamp; delta > int64(replayWindow/time.Second) || delta < -int64(replayWindow/time.Second) {
+		return false
+	}
+	if len(metadata.Nonce) < 1 || len(metadata.Nonce) > 128 {
+		return false
+	}
+	for index := 0; index < len(metadata.Nonce); index++ {
+		if metadata.Nonce[index] < 0x21 || metadata.Nonce[index] > 0x7e {
+			return false
+		}
+	}
+	return true
+}
+
+func normalizeReplayWindow(value time.Duration) time.Duration {
+	if value <= 0 {
+		return 5 * time.Minute
+	}
+	return value
+}
+
+func normalizeNonceTTL(value time.Duration) time.Duration {
+	if value <= 0 {
+		return 10 * time.Minute
+	}
+	return value
 }
 
 func (s *Service) RotateAPIKey(ctx context.Context, tenantID, agentID string) (CreateAgentResult, error) {
