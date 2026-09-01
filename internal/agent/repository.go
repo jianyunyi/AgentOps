@@ -9,12 +9,16 @@ import (
 	"gorm.io/gorm"
 )
 
-var ErrCredentialNotFound = errors.New("agent credential not found")
+var (
+	ErrCredentialNotFound = errors.New("agent credential not found")
+	ErrAgentNotFound      = errors.New("agent not found")
+)
 
 type Repository interface {
 	CreateAgent(ctx context.Context, agent *Agent) error
 	CreateCredential(ctx context.Context, credential *AgentCredential) error
 	FindCredentialByHash(ctx context.Context, keyHash string) (*AgentCredential, error)
+	FindAgent(ctx context.Context, tenantID, agentID string) (*Agent, error)
 	ListAgents(ctx context.Context, tenantID string) ([]Agent, error)
 	RevokeCredentials(ctx context.Context, tenantID, agentID string) error
 }
@@ -77,6 +81,17 @@ func (r *GORMRepository) FindCredentialByHash(ctx context.Context, keyHash strin
 		return nil, err
 	}
 	return &credential, nil
+}
+
+func (r *GORMRepository) FindAgent(ctx context.Context, tenantID, agentID string) (*Agent, error) {
+	var agent Agent
+	if err := r.db.WithContext(ctx).Where("tenant_id = ? AND id = ?", tenantID, agentID).First(&agent).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrAgentNotFound
+		}
+		return nil, err
+	}
+	return &agent, nil
 }
 
 func (r *GORMRepository) TouchCredential(ctx context.Context, id, ip string) error {

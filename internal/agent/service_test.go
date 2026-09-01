@@ -29,6 +29,13 @@ func (f *fakeRepository) CreateAgent(_ context.Context, agent *Agent) error {
 	return nil
 }
 
+func (f *fakeRepository) FindAgent(_ context.Context, tenantID, agentID string) (*Agent, error) {
+	if f.agent == nil || f.agent.TenantID != tenantID || f.agent.ID != agentID {
+		return nil, ErrAgentNotFound
+	}
+	return f.agent, nil
+}
+
 func (f *fakeRepository) CreateCredential(_ context.Context, credential *AgentCredential) error {
 	if f.credential == nil {
 		f.credential = credential
@@ -116,6 +123,32 @@ func TestAuthenticateAPIKeyRejectsUnknownKey(t *testing.T) {
 	}
 }
 
+func TestAuthenticateAPIKeyRejectsSuspendedAgent(t *testing.T) {
+	repo := &fakeRepository{}
+	svc := NewService(repo)
+	created, err := svc.CreateAgent(context.Background(), CreateAgentInput{TenantID: "tenant_001", Name: "Ops"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	repo.agent.Status = AgentStatusSuspended
+	if _, err := svc.AuthenticateAPIKey(context.Background(), created.RawAPIKey); !errors.Is(err, ErrInvalidAPIKey) {
+		t.Fatalf("suspended Agent error = %v, want ErrInvalidAPIKey", err)
+	}
+}
+
+func TestAuthenticateAPIKeyRejectsMissingAgent(t *testing.T) {
+	repo := &fakeRepository{}
+	svc := NewService(repo)
+	created, err := svc.CreateAgent(context.Background(), CreateAgentInput{TenantID: "tenant_001", Name: "Ops"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	repo.agent = nil
+	if _, err := svc.AuthenticateAPIKey(context.Background(), created.RawAPIKey); !errors.Is(err, ErrInvalidAPIKey) {
+		t.Fatalf("missing Agent error = %v, want ErrInvalidAPIKey", err)
+	}
+}
+
 func TestRotateAPIKeyRevokesPreviousCredential(t *testing.T) {
 	repo := &fakeRepository{}
 	svc := NewService(repo)
@@ -132,6 +165,25 @@ func TestRotateAPIKeyRevokesPreviousCredential(t *testing.T) {
 	}
 	if len(repo.credentials) != 1 || repo.credentials[0].Status != CredentialRevoked {
 		t.Fatal("rotation must revoke the old credential")
+	}
+}
+
+func TestRotateAPIKeyRejectsMissingAgent(t *testing.T) {
+	repo := &fakeRepository{}
+	svc := NewService(repo)
+	if _, err := svc.RotateAPIKey(context.Background(), "tenant_001", "agt_missing"); !errors.Is(err, ErrAgentNotFound) {
+		t.Fatalf("RotateAPIKey() error = %v, want ErrAgentNotFound", err)
+	}
+	if repo.credential != nil || len(repo.credentials) != 0 {
+		t.Fatal("rotation for a missing Agent must not create credentials")
+	}
+}
+
+func TestRevokeAPIKeyRejectsCrossTenantAgent(t *testing.T) {
+	repo := &fakeRepository{agent: &Agent{ID: "agt_001", TenantID: "tenant_002", Status: AgentStatusActive}}
+	svc := NewService(repo)
+	if err := svc.RevokeAPIKey(context.Background(), "tenant_001", "agt_001"); !errors.Is(err, ErrAgentNotFound) {
+		t.Fatalf("RevokeAPIKey() error = %v, want ErrAgentNotFound", err)
 	}
 }
 

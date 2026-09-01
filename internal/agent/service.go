@@ -123,6 +123,10 @@ func (s *Service) AuthenticateAPIKey(ctx context.Context, rawKey string) (Identi
 	if err != nil || credential == nil || subtle.ConstantTimeCompare([]byte(credential.KeyHash), []byte(hashKey(rawKey))) != 1 {
 		return Identity{}, ErrInvalidAPIKey
 	}
+	agentRecord, err := s.repo.FindAgent(ctx, credential.TenantID, credential.AgentID)
+	if err != nil || agentRecord == nil || agentRecord.Status != AgentStatusActive {
+		return Identity{}, ErrInvalidAPIKey
+	}
 	if toucher, ok := s.repo.(interface {
 		TouchCredential(context.Context, string, string) error
 	}); ok {
@@ -136,6 +140,9 @@ func (s *Service) AuthenticateAPIKey(ctx context.Context, rawKey string) (Identi
 func (s *Service) RotateAPIKey(ctx context.Context, tenantID, agentID string) (CreateAgentResult, error) {
 	if tenantID == "" || agentID == "" {
 		return CreateAgentResult{}, errors.New("tenant and agent are required")
+	}
+	if target, err := s.repo.FindAgent(ctx, tenantID, agentID); err != nil || target == nil {
+		return CreateAgentResult{}, ErrAgentNotFound
 	}
 	rawKey, err := randomKey()
 	if err != nil {
@@ -179,6 +186,9 @@ func (s *Service) RotateAPIKey(ctx context.Context, tenantID, agentID string) (C
 func (s *Service) RevokeAPIKey(ctx context.Context, tenantID, agentID string) error {
 	if tenantID == "" || agentID == "" {
 		return errors.New("tenant and agent are required")
+	}
+	if target, err := s.repo.FindAgent(ctx, tenantID, agentID); err != nil || target == nil {
+		return ErrAgentNotFound
 	}
 	if s.audit != nil {
 		input := audit.RecordInput{TenantID: tenantID, ActorID: "system", Action: "agent.key.revoke", ResourceType: "agent", ResourceID: agentID}
