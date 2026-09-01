@@ -1,0 +1,7 @@
+.git
+.github
+web
+.tmp-go-cache
+.tmp-go-mod
+*.log
+agentscope-backup.sql

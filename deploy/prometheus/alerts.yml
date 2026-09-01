@@ -1,0 +1,18 @@
+groups:
+  - name: agentscope-api
+    rules:
+      - alert: AgentScopeApiHighErrorRate
+        expr: rate(agentscope_http_errors_total[5m]) / clamp_min(rate(agentscope_http_requests_total[5m]), 1) > 0.05
+        for: 10m
+        labels: { severity: critical }
+        annotations: { summary: "AgentScope API error rate is above 5%" }
+      - alert: AgentScopeApiSlowRequests
+        expr: rate(agentscope_http_request_duration_ms_sum[5m]) / clamp_min(rate(agentscope_http_requests_total[5m]), 1) > 1000
+        for: 10m
+        labels: { severity: warning }
+        annotations: { summary: "AgentScope API average latency is above 1 second" }
+      - alert: AgentScopeApiDown
+        expr: up{job="agentscope-api"} == 0
+        for: 2m
+        labels: { severity: critical }
+        annotations: { summary: "AgentScope API target is down" }

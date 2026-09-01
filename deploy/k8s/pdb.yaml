@@ -1,0 +1,6 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata: { name: agentscope-api, namespace: agentscope }
+spec:
+  minAvailable: 2
+  selector: { matchLabels: { app: agentscope-api } }

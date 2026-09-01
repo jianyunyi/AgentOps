@@ -1,0 +1,17 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: agentscope-worker, namespace: agentscope }
+spec:
+  replicas: 2
+  strategy: { type: RollingUpdate, rollingUpdate: { maxUnavailable: 0, maxSurge: 1 } }
+  selector: { matchLabels: { app: agentscope-worker } }
+  template:
+    metadata: { labels: { app: agentscope-worker } }
+    spec:
+      serviceAccountName: agentscope
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: worker
+          image: ghcr.io/jianyunyi/agentscope-worker:CHANGE_ME
+          envFrom: [{ configMapRef: { name: agentscope-config } }, { secretRef: { name: agentscope-secrets } }]
+          resources: { requests: { cpu: 100m, memory: 128Mi }, limits: { cpu: 1, memory: 512Mi } }

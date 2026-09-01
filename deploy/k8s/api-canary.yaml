@@ -1,0 +1,26 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: agentscope-api-canary, namespace: agentscope }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: agentscope-api, version: canary } }
+  template:
+    metadata: { labels: { app: agentscope-api, version: canary } }
+    spec:
+      serviceAccountName: agentscope
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: api
+          image: ghcr.io/jianyunyi/agentscope-api:CANARY_TAG
+          ports: [{ name: http, containerPort: 8080 }]
+          envFrom: [{ configMapRef: { name: agentscope-config } }, { secretRef: { name: agentscope-secrets } }]
+          readinessProbe: { httpGet: { path: /health/ready, port: http }, periodSeconds: 10 }
+          livenessProbe: { httpGet: { path: /health/live, port: http }, periodSeconds: 15 }
+          resources: { requests: { cpu: 100m, memory: 128Mi }, limits: { cpu: 1, memory: 512Mi } }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: agentscope-api-canary, namespace: agentscope }
+spec:
+  selector: { app: agentscope-api, version: canary }
+  ports: [{ name: http, port: 80, targetPort: http }]
