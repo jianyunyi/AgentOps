@@ -1,0 +1,74 @@
+name: aks-release
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Immutable image tag; defaults to the commit SHA"
+        required: false
+        type: string
+      canary:
+        description: "Deploy canary only"
+        required: true
+        default: true
+        type: boolean
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  REGISTRY: ${{ vars.ACR_LOGIN_SERVER }}
+  RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+  AKS_CLUSTER: ${{ vars.AKS_CLUSTER_NAME }}
+  NAMESPACE: agentscope
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - name: Login to ACR
+        run: az acr login --name "${REGISTRY%%.*}"
+      - name: Build and push immutable images
+        env:
+          IMAGE_TAG: ${{ inputs.image_tag || github.sha }}
+        run: |
+          docker build -t "$REGISTRY/agentscope-api:$IMAGE_TAG" -t "$REGISTRY/agentscope-api:latest" .
+          docker build -t "$REGISTRY/agentscope-worker:$IMAGE_TAG" -t "$REGISTRY/agentscope-worker:latest" .
+          docker push "$REGISTRY/agentscope-api:$IMAGE_TAG"
+          docker push "$REGISTRY/agentscope-worker:$IMAGE_TAG"
+      - name: Get AKS credentials
+        run: az aks get-credentials --resource-group "$RESOURCE_GROUP" --name "$AKS_CLUSTER" --overwrite-existing
+      - name: Validate manifests
+        run: kubectl apply --dry-run=server -f deploy/k8s/namespace.yaml -f deploy/k8s/serviceaccount.yaml -f deploy/k8s/configmap.yaml -f deploy/k8s/api.yaml -f deploy/k8s/worker.yaml -f deploy/k8s/pdb.yaml
+      - name: Deploy canary
+        if: ${{ inputs.canary }}
+        env:
+          IMAGE_TAG: ${{ inputs.image_tag || github.sha }}
+        run: |
+          sed "s#CANARY_TAG#$IMAGE_TAG#g; s#ghcr.io/jianyunyi#$REGISTRY#g" deploy/k8s/api-canary.yaml | kubectl apply -f -
+          kubectl rollout status deployment/agentscope-api-canary -n "$NAMESPACE" --timeout=5m
+      - name: Promote stable deployment
+        if: ${{ !inputs.canary }}
+        env:
+          IMAGE_TAG: ${{ inputs.image_tag || github.sha }}
+        run: |
+          kubectl -n "$NAMESPACE" set image deployment/agentscope-api api="$REGISTRY/agentscope-api:$IMAGE_TAG"
+          kubectl -n "$NAMESPACE" set image deployment/agentscope-worker worker="$REGISTRY/agentscope-worker:$IMAGE_TAG"
+          kubectl -n "$NAMESPACE" rollout status deployment/agentscope-api --timeout=5m
+          kubectl -n "$NAMESPACE" rollout status deployment/agentscope-worker --timeout=5m
+      - name: Smoke test
+        if: ${{ !inputs.canary }}
+        run: kubectl -n "$NAMESPACE" run release-smoke-${GITHUB_RUN_ID} --rm --restart=Never --image=curlimages/curl:8.10.1 --command -- curl --fail --max-time 10 http://agentscope-api/health/ready
+      - name: Roll back on failure
+        if: ${{ failure() && !inputs.canary }}
+        run: |
+          kubectl -n "$NAMESPACE" rollout undo deployment/agentscope-api
+          kubectl -n "$NAMESPACE" rollout undo deployment/agentscope-worker
