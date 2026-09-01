@@ -57,6 +57,8 @@ type Repository interface {
 	FindByEmail(ctx context.Context, email string) (*User, error)
 	CreateSession(ctx context.Context, session *Session) error
 	FindSession(ctx context.Context, sessionID string) (*Session, error)
+	FindUserByID(ctx context.Context, userID string) (*User, error)
+	RevokeSession(ctx context.Context, sessionID string) error
 	RegisterTenantOwner(ctx context.Context, tenantName string, user *User) (string, error)
 	ListMembers(ctx context.Context, tenantID string) ([]User, error)
 	UpdateMemberRole(ctx context.Context, tenantID, memberID, role string) error
@@ -266,6 +268,21 @@ func (r *GORMRepository) FindSession(ctx context.Context, sessionID string) (*Se
 		return nil, err
 	}
 	return &session, nil
+}
+
+func (r *GORMRepository) FindUserByID(ctx context.Context, userID string) (*User, error) {
+	var user User
+	if err := r.db.WithContext(ctx).Select("id", "tenant_id", "role", "status").Where("id = ?", userID).First(&user).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrUserNotFound
+		}
+		return nil, err
+	}
+	return &user, nil
+}
+
+func (r *GORMRepository) RevokeSession(ctx context.Context, sessionID string) error {
+	return r.db.WithContext(ctx).Where("id = ?", sessionID).Delete(&Session{}).Error
 }
 
 func (r *GORMRepository) RegisterTenantOwner(ctx context.Context, tenantName string, user *User) (string, error) {

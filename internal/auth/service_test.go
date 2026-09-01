@@ -2,7 +2,9 @@ package auth
 
 import (
 	"context"
+	"errors"
 	"testing"
+	"time"
 )
 
 type fakeUserRepository struct {
@@ -64,6 +66,23 @@ func (f *fakeUserRepository) FindSession(_ context.Context, sessionID string) (*
 		return nil, ErrSessionNotFound
 	}
 	return session, nil
+}
+
+func (f *fakeUserRepository) FindUserByID(_ context.Context, userID string) (*User, error) {
+	for _, user := range f.users {
+		if user.ID == userID {
+			return user, nil
+		}
+	}
+	return nil, ErrUserNotFound
+}
+
+func (f *fakeUserRepository) RevokeSession(_ context.Context, sessionID string) error {
+	if _, ok := f.sessions[sessionID]; !ok {
+		return ErrSessionNotFound
+	}
+	delete(f.sessions, sessionID)
+	return nil
 }
 
 func (f *fakeUserRepository) RegisterTenantOwner(_ context.Context, tenantName string, user *User) (string, error) {
@@ -161,5 +180,26 @@ func TestRegisterCreatesTenantOwnerAndSession(t *testing.T) {
 func TestRegisterRejectsShortPassword(t *testing.T) {
 	if _, err := NewService(&fakeUserRepository{}, "secret").Register(context.Background(), "Acme", "owner@example.com", "short"); err == nil {
 		t.Fatal("Register() must reject a short password")
+	}
+}
+
+func TestResolveSessionUsesCurrentUserState(t *testing.T) {
+	user := &User{ID: "usr_001", TenantID: "tenant_001", Role: RoleViewer, Status: UserActive}
+	repo := &fakeUserRepository{
+		users:    map[string]*User{"user@example.com": user},
+		sessions: map[string]*Session{"ses_001": {ID: "ses_001", UserID: user.ID, TenantID: user.TenantID, Role: RoleOwner, ExpiresAt: time.Now().UTC().Add(time.Hour)}},
+	}
+
+	session, err := NewService(repo, "test-session-secret").ResolveSession(context.Background(), "ses_001")
+	if err != nil {
+		t.Fatalf("ResolveSession() error = %v", err)
+	}
+	if session.Role != RoleViewer {
+		t.Fatalf("ResolveSession() role = %q, want current role %q", session.Role, RoleViewer)
+	}
+
+	user.Status = UserDisabled
+	if _, err := NewService(repo, "test-session-secret").ResolveSession(context.Background(), "ses_001"); !errors.Is(err, ErrSessionNotFound) {
+		t.Fatalf("ResolveSession() error = %v, want ErrSessionNotFound for disabled user", err)
 	}
 }

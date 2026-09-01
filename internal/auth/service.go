@@ -97,7 +97,23 @@ func (s *Service) ResolveSession(ctx context.Context, sessionID string) (*Sessio
 	if strings.TrimSpace(sessionID) == "" {
 		return nil, ErrSessionNotFound
 	}
-	return s.repo.FindSession(ctx, sessionID)
+	session, err := s.repo.FindSession(ctx, sessionID)
+	if err != nil {
+		return nil, err
+	}
+	user, err := s.repo.FindUserByID(ctx, session.UserID)
+	if err != nil || user == nil || user.Status != UserActive || user.TenantID != session.TenantID {
+		return nil, ErrSessionNotFound
+	}
+	session.Role = user.Role
+	return session, nil
+}
+
+func (s *Service) RevokeSession(ctx context.Context, sessionID string) error {
+	if strings.TrimSpace(sessionID) == "" {
+		return nil
+	}
+	return s.repo.RevokeSession(ctx, sessionID)
 }
 
 func HasPermission(role, permission string) bool {

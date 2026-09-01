@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"strconv"
@@ -94,6 +95,18 @@ func setSessionCookie(c *gin.Context, sessionID string, expiresAt time.Time) {
 }
 
 func (h *Handler) Logout(c *gin.Context) {
+	requestContext := context.Background()
+	if c.Request != nil {
+		requestContext = c.Request.Context()
+	}
+	if c.Request != nil {
+		if sessionID, err := c.Cookie("agentscope_session"); err == nil && strings.TrimSpace(sessionID) != "" {
+			if err := h.service.RevokeSession(requestContext, sessionID); err != nil && !errors.Is(err, ErrSessionNotFound) {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "LOGOUT_FAILED", "message": "session could not be revoked"}})
+				return
+			}
+		}
+	}
 	cookie := &http.Cookie{Name: "agentscope_session", Value: "", Path: "/", MaxAge: -1, HttpOnly: true, Secure: true, SameSite: http.SameSiteLaxMode}
 	c.Header("Set-Cookie", cookie.String())
 	c.Status(http.StatusNoContent)

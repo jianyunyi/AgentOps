@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -43,6 +44,22 @@ func TestLogoutClearsSessionCookie(t *testing.T) {
 	cookies := context.Writer.Header().Values("Set-Cookie")
 	if len(cookies) != 1 || !strings.Contains(cookies[0], "Max-Age=0") {
 		t.Fatalf("expected expired session cookie, got %v", cookies)
+	}
+}
+
+func TestLogoutRevokesServerSession(t *testing.T) {
+	repo := &fakeUserRepository{
+		sessions: map[string]*Session{"ses_001": {ID: "ses_001", UserID: "usr_001", TenantID: "ten_001", Role: RoleOwner, ExpiresAt: time.Now().UTC().Add(time.Hour)}},
+	}
+	handler := NewHandler(NewService(repo, "test-secret"))
+	gin.SetMode(gin.TestMode)
+	context, _ := gin.CreateTestContext(httptest.NewRecorder())
+	context.Request = httptest.NewRequest(http.MethodPost, "/logout", nil)
+	context.Request.AddCookie(&http.Cookie{Name: "agentscope_session", Value: "ses_001"})
+
+	handler.Logout(context)
+	if _, ok := repo.sessions["ses_001"]; ok {
+		t.Fatal("Logout() must revoke the server-side session")
 	}
 }
 

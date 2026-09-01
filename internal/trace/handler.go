@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"agentscope/internal/agent"
+	"agentscope/internal/auth"
 	"github.com/gin-gonic/gin"
 )
 
@@ -60,7 +61,7 @@ func (h *Handler) listTraces(c *gin.Context) {
 	if pageSize > 100 {
 		pageSize = 100
 	}
-	traces, total, err := h.query.ListTraces(c.Request.Context(), identity.TenantID, (page-1)*pageSize, pageSize)
+	traces, total, err := h.query.ListTracesScoped(c.Request.Context(), identity.TenantID, identity.AgentID, (page-1)*pageSize, pageSize)
 	if err != nil {
 		writeError(c, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to query traces")
 		return
@@ -73,7 +74,7 @@ func (h *Handler) getTrace(c *gin.Context) {
 	if !ok {
 		return
 	}
-	trace, err := h.query.FindTrace(c.Request.Context(), identity.TenantID, c.Param("traceId"))
+	trace, err := h.query.FindTraceScoped(c.Request.Context(), identity.TenantID, identity.AgentID, c.Param("traceId"))
 	if errors.Is(err, ErrTraceNotFound) {
 		writeError(c, http.StatusNotFound, "TRACE_NOT_FOUND", "trace does not exist")
 		return
@@ -90,7 +91,11 @@ func (h *Handler) listSpans(c *gin.Context) {
 	if !ok {
 		return
 	}
-	spans, err := h.query.ListSpans(c.Request.Context(), identity.TenantID, c.Param("traceId"))
+	spans, err := h.query.ListSpansScoped(c.Request.Context(), identity.TenantID, identity.AgentID, c.Param("traceId"))
+	if errors.Is(err, ErrTraceNotFound) {
+		writeError(c, http.StatusNotFound, "TRACE_NOT_FOUND", "trace does not exist")
+		return
+	}
 	if err != nil {
 		writeError(c, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to query spans")
 		return
@@ -113,8 +118,19 @@ func (h *Handler) authenticateAgent(c *gin.Context) (agent.Identity, bool) {
 }
 
 func (h *Handler) authenticateQuery(c *gin.Context) (agent.Identity, bool) {
-	if tenantID, exists := c.Get("tenant_id"); exists {
-		return agent.Identity{TenantID: tenantID.(string), AgentID: "console"}, true
+	if tenantValue, exists := c.Get("tenant_id"); exists {
+		if c.Request != nil && strings.TrimSpace(c.GetHeader("Authorization")) != "" {
+			writeError(c, http.StatusBadRequest, "AMBIGUOUS_AUTHENTICATION", "use either session or agent credentials")
+			return agent.Identity{}, false
+		}
+		tenantID, ok := tenantValue.(string)
+		role, roleOK := c.Get("user_role")
+		roleName, roleStringOK := role.(string)
+		if !ok || !roleOK || !roleStringOK || !auth.HasPermission(roleName, auth.PermissionAgentRead) {
+			writeError(c, http.StatusForbidden, "FORBIDDEN", "permission denied")
+			return agent.Identity{}, false
+		}
+		return agent.Identity{TenantID: tenantID, AgentID: ""}, true
 	}
 	return h.authenticateAgent(c)
 }

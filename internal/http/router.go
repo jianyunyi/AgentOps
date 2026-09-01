@@ -26,7 +26,6 @@ func NewApplicationRouter(authService *auth.Service, agentService *agent.Service
 	console := router.Group("/api/v1")
 	console.Use(authHandler.Authenticate)
 	console.GET("/auth/me", authHandler.Me)
-	console.POST("/auth/logout", authHandler.Logout)
 	console.POST("/agents", auth.RequirePermission(auth.PermissionAgentWrite), agentHandler.Create)
 	console.GET("/agents", auth.RequirePermission(auth.PermissionAgentRead), agentHandler.List)
 	console.POST("/agents/:id/rotate-key", auth.RequirePermission(auth.PermissionAgentWrite), agentHandler.RotateKey)
@@ -45,6 +44,7 @@ func NewApplicationRouter(authService *auth.Service, agentService *agent.Service
 	console.POST("/policies/:id/activate", auth.RequirePermission(auth.PermissionPolicyWrite), policyHandler.Activate)
 	router.POST("/api/v1/auth/login", authHandler.Login)
 	router.POST("/api/v1/auth/register", authHandler.Register)
+	router.POST("/api/v1/auth/logout", authHandler.Logout)
 	router.POST("/api/v1/auth/invitations/accept", authHandler.AcceptInvitation)
 	return router
 }

@@ -24,9 +24,9 @@ type Repository interface {
 }
 
 type QueryRepository interface {
-	FindTrace(ctx context.Context, tenantID, traceID string) (*Trace, error)
-	ListTraces(ctx context.Context, tenantID string, offset, limit int) ([]Trace, int64, error)
-	ListSpans(ctx context.Context, tenantID, traceID string) ([]Span, error)
+	FindTraceScoped(ctx context.Context, tenantID, agentID, traceID string) (*Trace, error)
+	ListTracesScoped(ctx context.Context, tenantID, agentID string, offset, limit int) ([]Trace, int64, error)
+	ListSpansScoped(ctx context.Context, tenantID, agentID, traceID string) ([]Span, error)
 }
 
 type GORMRepository struct {
@@ -136,9 +136,16 @@ func randomPrefixedID(prefix string) string {
 }
 
 func (r *GORMRepository) ListTraces(ctx context.Context, tenantID string, offset, limit int) ([]Trace, int64, error) {
+	return r.ListTracesScoped(ctx, tenantID, "", offset, limit)
+}
+
+func (r *GORMRepository) ListTracesScoped(ctx context.Context, tenantID, agentID string, offset, limit int) ([]Trace, int64, error) {
 	var traces []Trace
 	var total int64
 	query := r.db.WithContext(ctx).Model(&Trace{}).Where("tenant_id = ?", tenantID)
+	if agentID != "" {
+		query = query.Where("agent_id = ?", agentID)
+	}
 	if err := query.Count(&total).Error; err != nil {
 		return nil, 0, err
 	}
@@ -149,6 +156,28 @@ func (r *GORMRepository) ListTraces(ctx context.Context, tenantID string, offset
 }
 
 func (r *GORMRepository) ListSpans(ctx context.Context, tenantID, traceID string) ([]Span, error) {
+	return r.ListSpansScoped(ctx, tenantID, "", traceID)
+}
+
+func (r *GORMRepository) FindTraceScoped(ctx context.Context, tenantID, agentID, traceID string) (*Trace, error) {
+	query := r.db.WithContext(ctx).Where("tenant_id = ? AND trace_id = ?", tenantID, traceID)
+	if agentID != "" {
+		query = query.Where("agent_id = ?", agentID)
+	}
+	var trace Trace
+	if err := query.First(&trace).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrTraceNotFound
+		}
+		return nil, err
+	}
+	return &trace, nil
+}
+
+func (r *GORMRepository) ListSpansScoped(ctx context.Context, tenantID, agentID, traceID string) ([]Span, error) {
+	if _, err := r.FindTraceScoped(ctx, tenantID, agentID, traceID); err != nil {
+		return nil, err
+	}
 	var spans []Span
 	if err := r.db.WithContext(ctx).Where("tenant_id = ? AND trace_id = ?", tenantID, traceID).Order("sequence ASC").Find(&spans).Error; err != nil {
 		return nil, err
