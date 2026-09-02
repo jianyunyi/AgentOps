@@ -64,6 +64,8 @@ jobs:
 
   typescript-sdk:
     runs-on: ubuntu-latest
+    env:
+      SDK_INTEGRATION_ENABLED: ${{ secrets.AGENTOPS_SDK_BASE_URL != '' && secrets.AGENT_API_KEY != '' && secrets.AGENT_SIGNING_SECRET != '' }}
     defaults:
       run:
         working-directory: sdk/typescript
@@ -80,7 +82,7 @@ jobs:
       - run: npm run build
       - run: npm audit --audit-level=high
       - name: Optional real API integration
-        if: ${{ secrets.AGENTOPS_SDK_BASE_URL != '' && secrets.AGENT_API_KEY != '' && secrets.AGENT_SIGNING_SECRET != '' }}
+        if: env.SDK_INTEGRATION_ENABLED == 'true'
         env:
           AGENTSCOPE_INTEGRATION: "1"
           AGENTOPS_SDK_BASE_URL: ${{ secrets.AGENTOPS_SDK_BASE_URL }}
