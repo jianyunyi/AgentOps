@@ -16,3 +16,35 @@ groups:
         for: 2m
         labels: { severity: critical }
         annotations: { summary: "AgentScope API target is down" }
+  - name: agentscope-worker
+    rules:
+      - alert: AgentScopeWorkerDown
+        expr: up{job="agentscope-worker"} == 0
+        for: 2m
+        labels: { severity: critical }
+        annotations: { summary: "AgentScope Worker target is down" }
+      - alert: AgentScopeWorkerRedisErrors
+        expr: sum(rate(agentscope_worker_redis_errors_total[5m])) > 0.1
+        for: 5m
+        labels: { severity: warning }
+        annotations: { summary: "AgentScope Worker is reporting Redis errors" }
+      - alert: AgentScopeWorkerDeadLetters
+        expr: rate(agentscope_worker_messages_dead_lettered_total[5m]) > 0
+        for: 5m
+        labels: { severity: warning }
+        annotations: { summary: "AgentScope Worker dead letters are increasing" }
+      - alert: AgentScopeWorkerOutboxPublishErrors
+        expr: rate(agentscope_worker_outbox_publish_errors_total[5m]) > 0
+        for: 5m
+        labels: { severity: critical }
+        annotations: { summary: "AgentScope Outbox publishing is failing" }
+      - alert: AgentScopeWorkerOutboxPendingAge
+        expr: agentscope_worker_outbox_pending_age_seconds > 60
+        for: 5m
+        labels: { severity: warning }
+        annotations: { summary: "AgentScope Outbox pending age is above 60 seconds" }
+      - alert: AgentScopeWorkerProcessingStalled
+        expr: rate(agentscope_worker_messages_acked_total[10m]) == 0 and (rate(agentscope_worker_messages_recovered_total[10m]) > 0 or rate(agentscope_worker_messages_retried_total[10m]) > 0)
+        for: 10m
+        labels: { severity: critical }
+        annotations: { summary: "AgentScope Worker processing appears stalled" }

@@ -43,8 +43,8 @@ func TestLoadUsesReplayProtectionDefaults(t *testing.T) {
 	if got.AgentReplayWindow != 300 || got.AgentNonceTTL != 600 {
 		t.Fatalf("replay defaults = window:%d ttl:%d", got.AgentReplayWindow, got.AgentNonceTTL)
 	}
-	if got.WorkerPendingIdleSeconds != 120 || got.WorkerMaxAttempts != 3 || got.WorkerConsumerID != "" {
-		t.Fatalf("worker defaults = idle:%d attempts:%d consumer:%q", got.WorkerPendingIdleSeconds, got.WorkerMaxAttempts, got.WorkerConsumerID)
+	if got.WorkerPendingIdleSeconds != 120 || got.WorkerMaxAttempts != 3 || got.WorkerConsumerID != "" || got.WorkerMetricsAddr != ":9091" {
+		t.Fatalf("worker defaults = idle:%d attempts:%d consumer:%q metrics:%q", got.WorkerPendingIdleSeconds, got.WorkerMaxAttempts, got.WorkerConsumerID, got.WorkerMetricsAddr)
 	}
 }
 
@@ -67,12 +67,13 @@ func TestLoadReadsWorkerConfiguration(t *testing.T) {
 	t.Setenv("WORKER_CONSUMER_ID", "worker-canary-01")
 	t.Setenv("WORKER_PENDING_IDLE_SECONDS", "300")
 	t.Setenv("WORKER_MAX_ATTEMPTS", "7")
+	t.Setenv("WORKER_METRICS_ADDR", "127.0.0.1:19091")
 
 	got, err := Load()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.WorkerConsumerID != "worker-canary-01" || got.WorkerPendingIdleSeconds != 300 || got.WorkerMaxAttempts != 7 {
+	if got.WorkerConsumerID != "worker-canary-01" || got.WorkerPendingIdleSeconds != 300 || got.WorkerMaxAttempts != 7 || got.WorkerMetricsAddr != "127.0.0.1:19091" {
 		t.Fatalf("worker config = %+v", got)
 	}
 }

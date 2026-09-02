@@ -56,24 +56,29 @@ func NewAnalysisProcessor(maxAttempts int, analyzer Analyzer) *AnalysisProcessor
 }
 
 func (p *AnalysisProcessor) Process(ctx context.Context, message AnalysisMessage, attempt int) Decision {
+	decision, _ := p.ProcessWithError(ctx, message, attempt)
+	return decision
+}
+
+func (p *AnalysisProcessor) ProcessWithError(ctx context.Context, message AnalysisMessage, attempt int) (Decision, error) {
 	if message.EventID == "" {
-		return DecisionDeadLetter
+		return DecisionDeadLetter, nil
 	}
 	key := message.TenantID + ":" + message.EventID
 	p.mu.Lock()
 	if _, ok := p.completed[message.TenantID+":"+message.EventID]; ok {
 		p.mu.Unlock()
-		return DecisionAck
+		return DecisionAck, nil
 	}
 	p.mu.Unlock()
 	if err := p.analyzer(ctx, message); err != nil {
 		if attempt >= p.maxAttempts {
-			return DecisionDeadLetter
+			return DecisionDeadLetter, err
 		}
-		return DecisionRetry
+		return DecisionRetry, err
 	}
 	p.mu.Lock()
 	p.completed[key] = struct{}{}
 	p.mu.Unlock()
-	return DecisionAck
+	return DecisionAck, nil
 }

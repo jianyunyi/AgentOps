@@ -12,5 +12,5 @@ WORKDIR /app
 COPY --from=build /out/api /app/api
 COPY --from=build /out/worker /app/worker
 USER agentscope
-EXPOSE 8080
+EXPOSE 8080 9091
 ENTRYPOINT ["/app/api"]

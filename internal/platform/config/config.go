@@ -27,6 +27,7 @@ type Config struct {
 	WorkerConsumerID         string
 	WorkerPendingIdleSeconds int64
 	WorkerMaxAttempts        int
+	WorkerMetricsAddr        string
 	DBMaxOpenConns           int
 	DBMaxIdleConns           int
 	DBConnMaxLifetimeMinutes int
@@ -90,6 +91,10 @@ func Load() (Config, error) {
 		return Config{}, parseErr
 	}
 	cfg.WorkerMaxAttempts = workerAttempts
+	cfg.WorkerMetricsAddr = os.Getenv("WORKER_METRICS_ADDR")
+	if cfg.WorkerMetricsAddr == "" {
+		cfg.WorkerMetricsAddr = ":9091"
+	}
 	cfg.DBMaxOpenConns, cfg.DBMaxIdleConns, cfg.DBConnMaxLifetimeMinutes = 50, 10, 30
 	if raw := os.Getenv("DB_MAX_OPEN_CONNS"); raw != "" {
 		value, err := strconv.Atoi(raw)

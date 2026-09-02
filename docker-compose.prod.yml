@@ -36,6 +36,8 @@ services:
       SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET is required}
       WORKER_PENDING_IDLE_SECONDS: ${WORKER_PENDING_IDLE_SECONDS:-120}
       WORKER_MAX_ATTEMPTS: ${WORKER_MAX_ATTEMPTS:-3}
+      WORKER_METRICS_ADDR: ${WORKER_METRICS_ADDR:-:9091}
+    expose: ["9091"]
     depends_on:
       mysql: { condition: service_healthy }
       redis: { condition: service_healthy }

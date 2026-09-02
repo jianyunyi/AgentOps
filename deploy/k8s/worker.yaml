@@ -6,7 +6,12 @@ spec:
   strategy: { type: RollingUpdate, rollingUpdate: { maxUnavailable: 0, maxSurge: 1 } }
   selector: { matchLabels: { app: agentscope-worker } }
   template:
-    metadata: { labels: { app: agentscope-worker } }
+    metadata:
+      labels: { app: agentscope-worker }
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: "/metrics"
+        prometheus.io/port: "9091"
     spec:
       serviceAccountName: agentscope
       terminationGracePeriodSeconds: 30
@@ -14,4 +19,5 @@ spec:
         - name: worker
           image: ghcr.io/jianyunyi/agentscope-worker:CHANGE_ME
           envFrom: [{ configMapRef: { name: agentscope-config } }, { secretRef: { name: agentscope-secrets } }]
+          ports: [{ name: metrics, containerPort: 9091, protocol: TCP }]
           resources: { requests: { cpu: 100m, memory: 128Mi }, limits: { cpu: 1, memory: 512Mi } }

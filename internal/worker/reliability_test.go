@@ -3,10 +3,14 @@ package worker
 import (
 	"context"
 	"errors"
+	"net/http/httptest"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
+	"agentscope/internal/outbox"
+	platformmetrics "agentscope/internal/platform/metrics"
 	redisv9 "github.com/redis/go-redis/v9"
 )
 
@@ -151,6 +155,26 @@ func TestRunUsesConfiguredConsumerForReadAndRecovery(t *testing.T) {
 	}
 }
 
+func TestRunRecordsReliabilityMetricsAtStateBoundaries(t *testing.T) {
+	fake := &fakeStreamClient{
+		claimResults: []fakeClaimResult{{messages: []redisv9.XMessage{message("pending-1")}}},
+		readResults:  []fakeReadResult{{err: context.Canceled}},
+	}
+	workerMetrics := platformmetrics.NewWorker()
+	options := noWaitOptions()
+	options.Metrics = workerMetrics
+	err := RunWithOptions(context.Background(), testConsumer(fake), NewAnalysisProcessor(3, func(context.Context, AnalysisMessage) error { return nil }), options)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("Run() error = %v, want context canceled", err)
+	}
+	response := httptest.NewRecorder()
+	workerMetrics.Handler()(response, httptest.NewRequest("GET", "/metrics", nil))
+	body := response.Body.String()
+	if !strings.Contains(body, "agentscope_worker_messages_recovered_total 1") || !strings.Contains(body, "agentscope_worker_messages_acked_total 1") {
+		t.Fatalf("reliability metrics = %s", body)
+	}
+}
+
 func TestRunProcessesPendingBeforeNewMessages(t *testing.T) {
 	fake := &fakeStreamClient{
 		claimResults: []fakeClaimResult{{messages: []redisv9.XMessage{messageWith("pending-1", "evt-pending")}}},
@@ -279,6 +303,32 @@ func TestRunOutboxContinuesAfterRuntimeError(t *testing.T) {
 	}
 	if publisher.calls != 2 {
 		t.Fatalf("PublishOne calls = %d, want 2", publisher.calls)
+	}
+}
+
+func TestRunOutboxBacksOffOnFailedOutcomeWithoutError(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	calls := 0
+	backoffs := make([]int, 0, 1)
+	options := noWaitOptions()
+	options.ErrorBackoff = func(attempt int) time.Duration {
+		backoffs = append(backoffs, attempt)
+		return 0
+	}
+	err := runOutbox(ctx, func(context.Context) (outbox.PublishOutcome, error) {
+		calls++
+		if calls == 1 {
+			return outbox.PublishOutcome{Status: outbox.PublishStatusFailed}, nil
+		}
+		cancel()
+		return outbox.PublishOutcome{}, context.Canceled
+	}, time.Nanosecond, options)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("runOutbox() error = %v, want context canceled", err)
+	}
+	if calls != 2 || !reflect.DeepEqual(backoffs, []int{1}) {
+		t.Fatalf("calls = %d, backoffs = %v", calls, backoffs)
 	}
 }
 

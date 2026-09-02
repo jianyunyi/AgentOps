@@ -4,11 +4,15 @@ import (
 	"context"
 	"encoding/json"
 	"log"
+	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"agentscope/internal/outbox"
 	"agentscope/internal/platform/config"
 	"agentscope/internal/platform/database"
+	platformmetrics "agentscope/internal/platform/metrics"
 	platformredis "agentscope/internal/platform/redis"
 	"agentscope/internal/policy"
 	"agentscope/internal/risk"
@@ -51,12 +55,19 @@ func main() {
 		}
 		return worker.NewStreamPublisher(client).Publish(ctx, message)
 	})
-	ctx, cancel := context.WithCancel(context.Background())
+	workerMetrics := platformmetrics.NewWorker()
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 	outboxErrors := make(chan error, 1)
-	go func() { outboxErrors <- worker.RunOutbox(ctx, publisher, 500*time.Millisecond) }()
+	go func() {
+		outboxErrors <- worker.RunOutboxPublisherWithOptions(ctx, publisher, 500*time.Millisecond, worker.RunOptions{Metrics: workerMetrics})
+	}()
 	analysisErrors := make(chan error, 1)
-	go func() { analysisErrors <- worker.Run(ctx, consumer, processor) }()
+	go func() {
+		analysisErrors <- worker.RunWithOptions(ctx, consumer, processor, worker.RunOptions{Metrics: workerMetrics})
+	}()
+	metricsErrors := make(chan error, 1)
+	go func() { metricsErrors <- worker.ServeMetrics(ctx, cfg.WorkerMetricsAddr, workerMetrics) }()
 	select {
 	case err := <-outboxErrors:
 		cancel()
@@ -64,6 +75,11 @@ func main() {
 			log.Fatal(err)
 		}
 	case err := <-analysisErrors:
+		cancel()
+		if err != nil && err != context.Canceled {
+			log.Fatal(err)
+		}
+	case err := <-metricsErrors:
 		cancel()
 		if err != nil && err != context.Canceled {
 			log.Fatal(err)

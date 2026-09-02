@@ -3,6 +3,7 @@ package outbox
 import (
 	"context"
 	"testing"
+	"time"
 )
 
 type fakePublisherRepo struct {
@@ -39,5 +40,21 @@ func TestPublisherKeepsFailedEventRetryable(t *testing.T) {
 	}
 	if !repo.failed || repo.delivered {
 		t.Fatalf("failed event state: delivered=%v failed=%v", repo.delivered, repo.failed)
+	}
+}
+
+func TestPublisherOutcomeDistinguishesDeliveredAndFailed(t *testing.T) {
+	repo := &fakePublisherRepo{event: Event{ID: "out_001", CreatedAt: time.Now().UTC(), Payload: []byte(`{}`)}}
+	publisher := NewPublisher(repo, func(context.Context, Event) error { return nil })
+	outcome, err := publisher.PublishOneOutcome(context.Background())
+	if err != nil || outcome.Status != PublishStatusDelivered {
+		t.Fatalf("delivered outcome = %+v, err = %v", outcome, err)
+	}
+
+	repo = &fakePublisherRepo{event: Event{ID: "out_002", CreatedAt: time.Now().UTC(), Payload: []byte(`{}`)}}
+	publisher = NewPublisher(repo, func(context.Context, Event) error { return context.DeadlineExceeded })
+	outcome, err = publisher.PublishOneOutcome(context.Background())
+	if err != nil || outcome.Status != PublishStatusFailed {
+		t.Fatalf("failed outcome = %+v, err = %v", outcome, err)
 	}
 }
