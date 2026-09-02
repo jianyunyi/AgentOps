@@ -35,6 +35,17 @@ func TestMemoryNonceStoreClaimsOnlyOnce(t *testing.T) {
 	}
 }
 
+func TestMemoryNonceStoreCleansExpiredEntries(t *testing.T) {
+	store := NewMemoryNonceStore()
+	store.values["tenant_001:agent_001:expired"] = time.Now().Add(-time.Second)
+	if _, err := store.Claim(context.Background(), "tenant_001", "agent_001", "nonce-2", time.Minute); err != nil {
+		t.Fatal(err)
+	}
+	if len(store.values) != 1 {
+		t.Fatalf("expired nonce was not cleaned up: %v", store.values)
+	}
+}
+
 func TestAuthenticateIngestRequestRejectsDuplicateNonce(t *testing.T) {
 	service, rawKey := newReplayTestService(t, NewMemoryNonceStore())
 	metadata := AuthenticationMetadata{Timestamp: time.Now().Unix(), Nonce: "nonce-1"}

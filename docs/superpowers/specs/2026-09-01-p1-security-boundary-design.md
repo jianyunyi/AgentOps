@@ -48,7 +48,7 @@ Agent 管理接口的 rotate/revoke 也必须先确认目标 Agent 属于当前�
 认证器在 API Key 校验成功后，通过注入的 `NonceStore` 执行：
 
 ```text
-SET agentscope:agent:nonce:{agent_id}:{nonce} 1 NX EX 600
+SET agentscope:agent:nonce:{tenant_id}:{agent_id}:{nonce} 1 NX EX 600
 ```
 
 Redis 返回已存在时返回 `409 REPLAY_DETECTED`；时间戳或 Nonce 格式不合法时返回 `400 INVALID_AGENT_REQUEST`。Redis 不可用时 fail-closed，返回 `503 AGENT_AUTH_UNAVAILABLE`，不允许绕过防重放继续写入。

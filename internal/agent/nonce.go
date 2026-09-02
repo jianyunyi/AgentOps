@@ -43,6 +43,11 @@ func (s *MemoryNonceStore) Claim(ctx context.Context, tenantID, agentID, nonce s
 	key := tenantID + ":" + agentID + ":" + nonce
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	for existingKey, expiresAt := range s.values {
+		if !expiresAt.After(now) {
+			delete(s.values, existingKey)
+		}
+	}
 	if expiresAt, exists := s.values[key]; exists && expiresAt.After(now) {
 		return false, nil
 	}

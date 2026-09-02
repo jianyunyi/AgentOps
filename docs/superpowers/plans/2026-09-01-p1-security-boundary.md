@@ -191,7 +191,7 @@ git commit -m "feat: add fail-closed agent replay protection"
 
 - [ ] **Step 1: Write failing Redis/config tests**
 
-Test that configuration defaults to a 300-second replay window and 600-second Nonce TTL, rejects values outside 30–900 seconds and 60–3600 seconds, and that the Redis store builds the key `agentscope:agent:nonce:{agentID}:{nonce}` and uses `SETNX` with the supplied TTL. Define a small `nonceRedisClient` interface returning `*redis.BoolCmd`, inject a fake that returns `redis.NewBoolResult`, and assert the command key, value, and TTL without adding a new test dependency.
+Test that configuration defaults to a 300-second replay window and 600-second Nonce TTL, rejects values outside 30–900 seconds and 60–3600 seconds, and that the Redis store builds the key `agentscope:agent:nonce:{tenantID}:{agentID}:{nonce}` and uses `SETNX` with the supplied TTL. Define a small `nonceRedisClient` interface returning `*redis.BoolCmd`, inject a fake that returns `redis.NewBoolResult`, and assert the command key, value, and TTL without adding a new test dependency.
 
 - [ ] **Step 2: Run focused tests and confirm failure**
 

@@ -31,7 +31,7 @@ func TestRedisNonceStoreClaimsWithNamespacedKeyAndTTL(t *testing.T) {
 	if err != nil || !claimed {
 		t.Fatalf("Claim() = %v, %v; want true, nil", claimed, err)
 	}
-	if client.key != "agentscope:agent:nonce:agent_001:nonce-1" || client.value != "1" || client.expiration != 10*time.Minute {
+	if client.key != "agentscope:agent:nonce:tenant_001:agent_001:nonce-1" || client.value != "1" || client.expiration != 10*time.Minute {
 		t.Fatalf("SETNX args = key:%q value:%v ttl:%v", client.key, client.value, client.expiration)
 	}
 }

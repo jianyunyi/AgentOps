@@ -20,7 +20,7 @@ func NewRedisNonceStore(client nonceRedisClient) *RedisNonceStore {
 	return &RedisNonceStore{client: client}
 }
 
-func (s *RedisNonceStore) Claim(ctx context.Context, _ string, agentID, nonce string, ttl time.Duration) (bool, error) {
+func (s *RedisNonceStore) Claim(ctx context.Context, tenantID, agentID, nonce string, ttl time.Duration) (bool, error) {
 	if s == nil || s.client == nil {
 		return false, errors.New("redis nonce client is nil")
 	}
@@ -30,5 +30,5 @@ func (s *RedisNonceStore) Claim(ctx context.Context, _ string, agentID, nonce st
 	if ttl <= 0 {
 		return false, errors.New("nonce ttl must be positive")
 	}
-	return s.client.SetNX(ctx, "agentscope:agent:nonce:"+agentID+":"+nonce, "1", ttl).Result()
+	return s.client.SetNX(ctx, "agentscope:agent:nonce:"+tenantID+":"+agentID+":"+nonce, "1", ttl).Result()
 }
