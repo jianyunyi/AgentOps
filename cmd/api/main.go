@@ -46,7 +46,7 @@ func main() {
 	auditService := audit.NewService(audit.NewGORMRepository(db))
 	policyService := policy.NewService(policy.NewGORMRepository(db))
 	riskService := risk.NewServiceWithPolicy(risk.NewGORMRepository(db), nil, policyService)
-	agentService := agent.NewServiceWithAudit(agentRepo, auditService)
+	agentService := agent.NewServiceWithAuditAndNonceStore(agentRepo, auditService, agent.NewRedisNonceStore(redisClient), time.Duration(cfg.AgentReplayWindow)*time.Second, time.Duration(cfg.AgentNonceTTL)*time.Second)
 	authRepo := auth.NewGORMRepository(db)
 	authService := auth.NewServiceWithAudit(authRepo, cfg.SessionSecret, auditService)
 	var oidcService *auth.OIDCService

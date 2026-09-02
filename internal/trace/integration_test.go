@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -91,6 +92,10 @@ func (f *fakeAuthenticator) AuthenticateAPIKey(_ context.Context, key string) (a
 	return identity, nil
 }
 
+func (f *fakeAuthenticator) AuthenticateIngestRequest(ctx context.Context, key string, _ agent.AuthenticationMetadata) (agent.Identity, error) {
+	return f.AuthenticateAPIKey(ctx, key)
+}
+
 func TestTraceTenantIsolation(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	repo := &fakeTraceRepository{eventIDs: map[string]bool{}}
@@ -112,6 +117,8 @@ func TestTraceTenantIsolation(t *testing.T) {
 	body, _ := json.Marshal(payload)
 	req := httptest.NewRequest("POST", "/api/v1/ingest/events", strings.NewReader(string(body)))
 	req.Header.Set("Authorization", "Bearer ag_live_tenant_one")
+	req.Header.Set("X-Agent-Timestamp", strconv.FormatInt(time.Now().Unix(), 10))
+	req.Header.Set("X-Agent-Nonce", "nonce-tenant-one")
 	res := httptest.NewRecorder()
 	router.ServeHTTP(res, req)
 	if res.Code != 202 {
@@ -150,7 +157,9 @@ func TestTraceAgentKeyQueriesOnlyItsOwnAgent(t *testing.T) {
 	}
 	var page struct {
 		Data       []Trace `json:"data"`
-		Pagination struct{ Total int `json:"total"` } `json:"pagination"`
+		Pagination struct {
+			Total int `json:"total"`
+		} `json:"pagination"`
 	}
 	if err := json.Unmarshal(listResponse.Body.Bytes(), &page); err != nil {
 		t.Fatal(err)

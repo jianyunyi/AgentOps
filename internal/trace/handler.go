@@ -14,6 +14,7 @@ import (
 
 type Authenticator interface {
 	AuthenticateAPIKey(ctx context.Context, rawKey string) (agent.Identity, error)
+	AuthenticateIngestRequest(ctx context.Context, rawKey string, metadata agent.AuthenticationMetadata) (agent.Identity, error)
 }
 
 type Handler struct {
@@ -34,7 +35,7 @@ func NewRouter(service *Service, query QueryRepository, authenticator Authentica
 }
 
 func (h *Handler) ingest(c *gin.Context) {
-	identity, ok := h.authenticateAgent(c)
+	identity, ok := h.authenticateIngest(c)
 	if !ok {
 		return
 	}
@@ -49,6 +50,39 @@ func (h *Handler) ingest(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusAccepted, gin.H{"data": gin.H{"duplicate": result.Duplicate}})
+}
+
+func (h *Handler) authenticateIngest(c *gin.Context) (agent.Identity, bool) {
+	timestamp, err := strconv.ParseInt(strings.TrimSpace(c.GetHeader("X-Agent-Timestamp")), 10, 64)
+	if err != nil {
+		writeError(c, http.StatusBadRequest, "INVALID_AGENT_REQUEST", "agent timestamp and nonce are required")
+		return agent.Identity{}, false
+	}
+	nonce := strings.TrimSpace(c.GetHeader("X-Agent-Nonce"))
+	if nonce == "" {
+		writeError(c, http.StatusBadRequest, "INVALID_AGENT_REQUEST", "agent timestamp and nonce are required")
+		return agent.Identity{}, false
+	}
+	header := c.GetHeader("Authorization")
+	if !strings.HasPrefix(header, "Bearer ") {
+		writeError(c, http.StatusUnauthorized, "UNAUTHORIZED_AGENT", "agent authorization is required")
+		return agent.Identity{}, false
+	}
+	identity, err := h.authenticator.AuthenticateIngestRequest(c.Request.Context(), strings.TrimSpace(strings.TrimPrefix(header, "Bearer ")), agent.AuthenticationMetadata{Timestamp: timestamp, Nonce: nonce})
+	if err != nil {
+		switch {
+		case errors.Is(err, agent.ErrInvalidAgentRequest):
+			writeError(c, http.StatusBadRequest, "INVALID_AGENT_REQUEST", "agent timestamp or nonce is invalid")
+		case errors.Is(err, agent.ErrReplayDetected):
+			writeError(c, http.StatusConflict, "REPLAY_DETECTED", "agent request has already been accepted")
+		case errors.Is(err, agent.ErrNonceStoreUnavailable):
+			writeError(c, http.StatusServiceUnavailable, "AGENT_AUTH_UNAVAILABLE", "agent authorization is temporarily unavailable")
+		default:
+			writeError(c, http.StatusUnauthorized, "UNAUTHORIZED_AGENT", "agent authorization is invalid")
+		}
+		return agent.Identity{}, false
+	}
+	return identity, true
 }
 
 func (h *Handler) listTraces(c *gin.Context) {
