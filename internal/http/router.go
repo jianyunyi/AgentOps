@@ -28,6 +28,7 @@ func NewApplicationRouter(authService *auth.Service, agentService *agent.Service
 	console.GET("/auth/me", authHandler.Me)
 	console.POST("/agents", auth.RequirePermission(auth.PermissionAgentWrite), agentHandler.Create)
 	console.GET("/agents", auth.RequirePermission(auth.PermissionAgentRead), agentHandler.List)
+	console.GET("/agents/migration-status", auth.RequirePermission(auth.PermissionAgentRead), agentHandler.MigrationStatus)
 	console.POST("/agents/:id/rotate-key", auth.RequirePermission(auth.PermissionAgentWrite), agentHandler.RotateKey)
 	console.POST("/agents/:id/revoke-key", auth.RequirePermission(auth.PermissionAgentWrite), agentHandler.RevokeKey)
 	console.GET("/audit-logs", auth.RequirePermission(auth.PermissionAuditRead), auditHandler.List)

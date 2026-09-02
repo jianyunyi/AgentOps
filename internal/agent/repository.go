@@ -110,3 +110,81 @@ func (r *GORMRepository) ListAgents(ctx context.Context, tenantID string) ([]Age
 func (r *GORMRepository) RevokeCredentials(ctx context.Context, tenantID, agentID string) error {
 	return r.db.WithContext(ctx).Model(&AgentCredential{}).Where("tenant_id = ? AND agent_id = ? AND status = ?", tenantID, agentID, CredentialActive).Updates(map[string]any{"status": CredentialRevoked, "revoked_at": time.Now().UTC()}).Error
 }
+
+func (r *GORMRepository) GetCredentialMigrationSummary(ctx context.Context, tenantID string) (CredentialMigrationSummary, error) {
+	var summary CredentialMigrationSummary
+	const query = `
+		SELECT
+			COUNT(*) AS total_agents,
+			SUM(CASE WHEN EXISTS (
+				SELECT 1 FROM agent_credentials migrated
+				WHERE migrated.agent_id = a.id AND migrated.tenant_id = a.tenant_id AND migrated.status = ?
+				AND COALESCE(OCTET_LENGTH(migrated.signing_secret_ciphertext), 0) > 0
+			) AND NOT EXISTS (
+				SELECT 1 FROM agent_credentials legacy
+				WHERE legacy.agent_id = a.id AND legacy.tenant_id = a.tenant_id AND legacy.status = ?
+				AND COALESCE(OCTET_LENGTH(legacy.signing_secret_ciphertext), 0) = 0
+			) THEN 1 ELSE 0 END) AS migrated_agents,
+			SUM(CASE WHEN EXISTS (
+				SELECT 1 FROM agent_credentials legacy
+				WHERE legacy.agent_id = a.id AND legacy.tenant_id = a.tenant_id AND legacy.status = ?
+				AND COALESCE(OCTET_LENGTH(legacy.signing_secret_ciphertext), 0) = 0
+			) THEN 1 ELSE 0 END) AS legacy_agents
+		FROM agents a
+		WHERE a.tenant_id = ? AND a.status = ? AND EXISTS (
+			SELECT 1 FROM agent_credentials active
+			WHERE active.agent_id = a.id AND active.tenant_id = a.tenant_id AND active.status = ?
+		)`
+	if err := r.db.WithContext(ctx).Raw(query, CredentialActive, CredentialActive, CredentialActive, tenantID, AgentStatusActive, CredentialActive).Scan(&summary).Error; err != nil {
+		return CredentialMigrationSummary{}, err
+	}
+	return summary, nil
+}
+
+func (r *GORMRepository) ListLegacyAgents(ctx context.Context, tenantID, query string, page, pageSize int) ([]LegacyAgent, int64, error) {
+	var total int64
+	base := r.db.WithContext(ctx).Table("agents AS a").
+		Joins("JOIN agent_credentials AS c ON c.agent_id = a.id AND c.tenant_id = a.tenant_id").
+		Where("a.tenant_id = ? AND a.status = ? AND c.status = ? AND COALESCE(OCTET_LENGTH(c.signing_secret_ciphertext), 0) = 0", tenantID, AgentStatusActive, CredentialActive)
+	if query != "" {
+		like := "%" + query + "%"
+		base = base.Where("(a.id LIKE ? OR a.name LIKE ?)", like, like)
+	}
+	countQuery := base.Session(&gorm.Session{}).Select("COUNT(DISTINCT a.id)").Count(&total)
+	if countQuery.Error != nil {
+		return nil, 0, countQuery.Error
+	}
+	type legacyAgentRow struct {
+		ID          string     `gorm:"column:id"`
+		Name        string     `gorm:"column:name"`
+		Environment string     `gorm:"column:environment"`
+		Status      string     `gorm:"column:status"`
+		LastUsedAt  *time.Time `gorm:"column:last_used_at"`
+	}
+	var rows []legacyAgentRow
+	offset := (page - 1) * pageSize
+	listQuery := base.Select("a.id, a.name, a.environment, a.status, MAX(c.last_used_at) AS last_used_at").
+		Group("a.id, a.name, a.environment, a.status, a.created_at").
+		Order("a.created_at DESC").Offset(offset).Limit(pageSize).Scan(&rows)
+	if listQuery.Error != nil {
+		return nil, 0, listQuery.Error
+	}
+	agents := make([]LegacyAgent, 0, len(rows))
+	for _, row := range rows {
+		agents = append(agents, LegacyAgent{ID: row.ID, Name: row.Name, Environment: row.Environment, Status: row.Status, LastUsedAt: row.LastUsedAt})
+	}
+	return agents, total, nil
+}
+
+func (r *GORMRepository) CountLegacyCredentials(ctx context.Context) (int64, error) {
+	var count int64
+	const query = `
+		SELECT COUNT(DISTINCT a.id)
+		FROM agents a
+		JOIN agent_credentials c ON c.agent_id = a.id AND c.tenant_id = a.tenant_id
+		WHERE a.status = ? AND c.status = ? AND COALESCE(OCTET_LENGTH(c.signing_secret_ciphertext), 0) = 0`
+	if err := r.db.WithContext(ctx).Raw(query, AgentStatusActive, CredentialActive).Scan(&count).Error; err != nil {
+		return 0, err
+	}
+	return count, nil
+}

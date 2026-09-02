@@ -40,6 +40,14 @@ func main() {
 	if err := database.Migrate(db); err != nil {
 		log.Fatal(err)
 	}
+	if cfg.AgentSignatureRequired {
+		preflightCtx, preflightCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		if err := agent.CheckSignatureMigrationReady(preflightCtx, agent.NewGORMRepository(db)); err != nil {
+			preflightCancel()
+			log.Fatalf("agent signature migration preflight failed: %v; keep AGENT_SIGNATURE_REQUIRED=false, rotate legacy Agent credentials, then retry", err)
+		}
+		preflightCancel()
+	}
 
 	redisClient := platformredis.NewClient(cfg.RedisAddr)
 	agentRepo := agent.NewGORMRepository(db)
