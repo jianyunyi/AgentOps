@@ -2,6 +2,8 @@ package trace
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -13,6 +15,20 @@ import (
 	"agentscope/internal/auth"
 	"github.com/gin-gonic/gin"
 )
+
+type metadataCapturingAuthenticator struct {
+	identity agent.Identity
+	metadata agent.AuthenticationMetadata
+}
+
+func (f *metadataCapturingAuthenticator) AuthenticateAPIKey(context.Context, string) (agent.Identity, error) {
+	return f.identity, nil
+}
+
+func (f *metadataCapturingAuthenticator) AuthenticateIngestRequest(_ context.Context, _ string, metadata agent.AuthenticationMetadata) (agent.Identity, error) {
+	f.metadata = metadata
+	return f.identity, nil
+}
 
 type replayTestAuthenticator struct {
 	identity   agent.Identity
@@ -109,5 +125,28 @@ func TestIngestMapsReplayDetectedError(t *testing.T) {
 	router.ServeHTTP(response, request)
 	if response.Code != http.StatusConflict || !strings.Contains(response.Body.String(), "REPLAY_DETECTED") {
 		t.Fatalf("replay response = %d %s", response.Code, response.Body.String())
+	}
+}
+
+func TestIngestPassesBodyBoundSignatureMetadataToAuthenticator(t *testing.T) {
+	authenticator := &metadataCapturingAuthenticator{identity: agent.Identity{TenantID: "tenant_001", AgentID: "agent_001"}}
+	repo := &fakeTraceRepository{eventIDs: map[string]bool{}}
+	router := NewRouter(NewService(repo), repo, authenticator)
+	body := `{"event_id":"evt_4","trace_id":"trace_4","span_id":"span_4","event_type":"trace_start","occurred_at":"2026-09-02T00:00:00Z","payload":null}`
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/ingest/events", strings.NewReader(body))
+	timestamp := time.Now().Unix()
+	nonce := "nonce-4"
+	request.Header.Set("Authorization", "Bearer ag_live_test")
+	request.Header.Set("X-Agent-Timestamp", strconv.FormatInt(timestamp, 10))
+	request.Header.Set("X-Agent-Nonce", nonce)
+	request.Header.Set("X-Agent-Signature", "v1=test-signature")
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+	if response.Code != http.StatusAccepted {
+		t.Fatalf("signed metadata response = %d %s", response.Code, response.Body.String())
+	}
+	hash := sha256.Sum256([]byte(body))
+	if authenticator.metadata.Method != http.MethodPost || authenticator.metadata.Path != "/api/v1/ingest/events" || authenticator.metadata.BodyHash != hex.EncodeToString(hash[:]) || authenticator.metadata.Signature != "v1=test-signature" {
+		t.Fatalf("captured metadata = %+v", authenticator.metadata)
 	}
 }

@@ -24,8 +24,9 @@ type CreateAgentInput struct {
 }
 
 type CreateAgentResult struct {
-	Agent     Agent
-	RawAPIKey string
+	Agent            Agent
+	RawAPIKey        string
+	RawSigningSecret string
 }
 
 type Identity struct {
@@ -34,11 +35,14 @@ type Identity struct {
 }
 
 type Service struct {
-	repo         Repository
-	audit        *audit.Service
-	nonceStore   NonceStore
-	replayWindow time.Duration
-	nonceTTL     time.Duration
+	repo              Repository
+	audit             *audit.Service
+	nonceStore        NonceStore
+	replayWindow      time.Duration
+	nonceTTL          time.Duration
+	signingProtector  SigningSecretProtector
+	signingEnabled    bool
+	signatureRequired bool
 }
 
 func NewService(repo Repository) *Service {
@@ -55,6 +59,10 @@ func NewServiceWithNonceStore(repo Repository, nonceStore NonceStore, replayWind
 
 func NewServiceWithAuditAndNonceStore(repo Repository, auditService *audit.Service, nonceStore NonceStore, replayWindow, nonceTTL time.Duration) *Service {
 	return &Service{repo: repo, audit: auditService, nonceStore: nonceStore, replayWindow: normalizeReplayWindow(replayWindow), nonceTTL: normalizeNonceTTL(nonceTTL)}
+}
+
+func NewServiceWithAuditAndNonceStoreAndSigning(repo Repository, auditService *audit.Service, nonceStore NonceStore, replayWindow, nonceTTL time.Duration, protector SigningSecretProtector, signatureRequired bool) *Service {
+	return &Service{repo: repo, audit: auditService, nonceStore: nonceStore, replayWindow: normalizeReplayWindow(replayWindow), nonceTTL: normalizeNonceTTL(nonceTTL), signingProtector: protector, signingEnabled: true, signatureRequired: signatureRequired}
 }
 
 func (s *Service) CreateAgent(ctx context.Context, input CreateAgentInput) (CreateAgentResult, error) {
@@ -92,8 +100,12 @@ func (s *Service) CreateAgent(ctx context.Context, input CreateAgentInput) (Crea
 		Status:    CredentialActive,
 		CreatedAt: time.Now().UTC(),
 	}
+	rawSigningSecret, err := s.prepareSigningSecret(&credential)
+	if err != nil {
+		return CreateAgentResult{}, err
+	}
 	if s.audit != nil {
-		input := audit.RecordInput{TenantID: agent.TenantID, ActorID: "system", Action: "agent.create", ResourceType: "agent", ResourceID: agent.ID, After: map[string]any{"name": agent.Name, "environment": agent.Environment}}
+		input := audit.RecordInput{TenantID: agent.TenantID, ActorID: "system", Action: "agent.create", ResourceType: "agent", ResourceID: agent.ID, After: map[string]any{"credential_id": credential.ID, "key_prefix": credential.KeyPrefix, "signing_protocol": signingProtocol(rawSigningSecret)}}
 		if atomic, ok := s.repo.(interface {
 			CreateAgentWithCredentialAndAudit(context.Context, *Agent, *AgentCredential, *audit.Record) error
 		}); ok {
@@ -123,20 +135,13 @@ func (s *Service) CreateAgent(ctx context.Context, input CreateAgentInput) (Crea
 			return CreateAgentResult{}, err
 		}
 	}
-	return CreateAgentResult{Agent: agent, RawAPIKey: rawKey}, nil
+	return CreateAgentResult{Agent: agent, RawAPIKey: rawKey, RawSigningSecret: rawSigningSecret}, nil
 }
 
 func (s *Service) AuthenticateAPIKey(ctx context.Context, rawKey string) (Identity, error) {
-	if !strings.HasPrefix(rawKey, "ag_live_") {
-		return Identity{}, ErrInvalidAPIKey
-	}
-	credential, err := s.repo.FindCredentialByHash(ctx, hashKey(rawKey))
-	if err != nil || credential == nil || subtle.ConstantTimeCompare([]byte(credential.KeyHash), []byte(hashKey(rawKey))) != 1 {
-		return Identity{}, ErrInvalidAPIKey
-	}
-	agentRecord, err := s.repo.FindAgent(ctx, credential.TenantID, credential.AgentID)
-	if err != nil || agentRecord == nil || agentRecord.Status != AgentStatusActive {
-		return Identity{}, ErrInvalidAPIKey
+	credential, identity, err := s.authenticateCredential(ctx, rawKey)
+	if err != nil {
+		return Identity{}, err
 	}
 	if toucher, ok := s.repo.(interface {
 		TouchCredential(context.Context, string, string) error
@@ -145,15 +150,18 @@ func (s *Service) AuthenticateAPIKey(ctx context.Context, rawKey string) (Identi
 			return Identity{}, fmt.Errorf("record credential usage: %w", err)
 		}
 	}
-	return Identity{TenantID: credential.TenantID, AgentID: credential.AgentID}, nil
+	return identity, nil
 }
 
 func (s *Service) AuthenticateIngestRequest(ctx context.Context, rawKey string, metadata AuthenticationMetadata) (Identity, error) {
 	if !validAuthenticationMetadata(metadata, normalizeReplayWindow(s.replayWindow)) {
 		return Identity{}, ErrInvalidAgentRequest
 	}
-	identity, err := s.AuthenticateAPIKey(ctx, rawKey)
+	credential, identity, err := s.authenticateCredential(ctx, rawKey)
 	if err != nil {
+		return Identity{}, err
+	}
+	if err := s.verifyRequestSignature(credential, metadata); err != nil {
 		return Identity{}, err
 	}
 	if s.nonceStore == nil {
@@ -166,7 +174,76 @@ func (s *Service) AuthenticateIngestRequest(ctx context.Context, rawKey string, 
 	if !claimed {
 		return Identity{}, ErrReplayDetected
 	}
+	if toucher, ok := s.repo.(interface {
+		TouchCredential(context.Context, string, string) error
+	}); ok {
+		if err := toucher.TouchCredential(ctx, credential.ID, ""); err != nil {
+			return Identity{}, fmt.Errorf("record credential usage: %w", err)
+		}
+	}
 	return identity, nil
+}
+
+func (s *Service) authenticateCredential(ctx context.Context, rawKey string) (*AgentCredential, Identity, error) {
+	if !strings.HasPrefix(rawKey, "ag_live_") {
+		return nil, Identity{}, ErrInvalidAPIKey
+	}
+	keyHash := hashKey(rawKey)
+	credential, err := s.repo.FindCredentialByHash(ctx, keyHash)
+	if err != nil || credential == nil || credential.Status != CredentialActive || subtle.ConstantTimeCompare([]byte(credential.KeyHash), []byte(keyHash)) != 1 {
+		return nil, Identity{}, ErrInvalidAPIKey
+	}
+	agentRecord, err := s.repo.FindAgent(ctx, credential.TenantID, credential.AgentID)
+	if err != nil || agentRecord == nil || agentRecord.Status != AgentStatusActive {
+		return nil, Identity{}, ErrInvalidAPIKey
+	}
+	return credential, Identity{TenantID: credential.TenantID, AgentID: credential.AgentID}, nil
+}
+
+func (s *Service) verifyRequestSignature(credential *AgentCredential, metadata AuthenticationMetadata) error {
+	if len(credential.SigningSecretCiphertext) == 0 {
+		if s.signatureRequired {
+			return ErrSignatureRequired
+		}
+		return nil
+	}
+	if s.signingProtector == nil {
+		return ErrSigningSecretUnavailable
+	}
+	secret, err := s.signingProtector.Decrypt(credential.SigningSecretCiphertext)
+	if err != nil {
+		return ErrSigningSecretUnavailable
+	}
+	if err := VerifyAgentSignature(secret, metadata); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (s *Service) prepareSigningSecret(credential *AgentCredential) (string, error) {
+	if !s.signingEnabled {
+		return "", nil
+	}
+	if s.signingProtector == nil {
+		return "", ErrSigningSecretUnavailable
+	}
+	secret := make([]byte, 32)
+	if _, err := rand.Read(secret); err != nil {
+		return "", err
+	}
+	ciphertext, err := s.signingProtector.Encrypt(secret)
+	if err != nil {
+		return "", ErrSigningSecretUnavailable
+	}
+	credential.SigningSecretCiphertext = ciphertext
+	return encodeSigningSecret(secret), nil
+}
+
+func signingProtocol(rawSecret string) string {
+	if rawSecret == "" {
+		return "legacy"
+	}
+	return signingVersion
 }
 
 func validAuthenticationMetadata(metadata AuthenticationMetadata, replayWindow time.Duration) bool {
@@ -213,8 +290,12 @@ func (s *Service) RotateAPIKey(ctx context.Context, tenantID, agentID string) (C
 		return CreateAgentResult{}, err
 	}
 	credential := &AgentCredential{ID: mustRandomID("cred_"), TenantID: tenantID, AgentID: agentID, KeyPrefix: rawKey[:min(16, len(rawKey))], KeyHash: hashKey(rawKey), Status: CredentialActive, CreatedAt: time.Now().UTC()}
+	rawSigningSecret, err := s.prepareSigningSecret(credential)
+	if err != nil {
+		return CreateAgentResult{}, err
+	}
 	if s.audit != nil {
-		input := audit.RecordInput{TenantID: tenantID, ActorID: "system", Action: "agent.key.rotate", ResourceType: "agent", ResourceID: agentID, After: map[string]any{"key_prefix": credential.KeyPrefix}}
+		input := audit.RecordInput{TenantID: tenantID, ActorID: "system", Action: "agent.key.rotate", ResourceType: "agent", ResourceID: agentID, After: map[string]any{"credential_id": credential.ID, "key_prefix": credential.KeyPrefix, "signing_protocol": signingProtocol(rawSigningSecret)}}
 		if atomic, ok := s.repo.(interface {
 			RotateCredentialWithAudit(context.Context, string, string, *AgentCredential, *audit.Record) error
 		}); ok {
@@ -244,7 +325,7 @@ func (s *Service) RotateAPIKey(ctx context.Context, tenantID, agentID string) (C
 			return CreateAgentResult{}, err
 		}
 	}
-	return CreateAgentResult{Agent: Agent{ID: agentID, TenantID: tenantID}, RawAPIKey: rawKey}, nil
+	return CreateAgentResult{Agent: Agent{ID: agentID, TenantID: tenantID}, RawAPIKey: rawKey, RawSigningSecret: rawSigningSecret}, nil
 }
 
 func (s *Service) RevokeAPIKey(ctx context.Context, tenantID, agentID string) error {

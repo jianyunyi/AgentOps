@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"errors"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -27,10 +28,14 @@ func (h *Handler) Create(c *gin.Context) {
 	}
 	result, err := h.service.CreateAgent(c.Request.Context(), CreateAgentInput{TenantID: tenantID.(string), Name: request.Name, Description: request.Description, Environment: request.Environment})
 	if err != nil {
+		if errors.Is(err, ErrSigningSecretUnavailable) {
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": gin.H{"code": "AGENT_AUTH_UNAVAILABLE", "message": "agent credential signing is temporarily unavailable"}})
+			return
+		}
 		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "AGENT_CREATE_FAILED", "message": err.Error()}})
 		return
 	}
-	c.JSON(http.StatusCreated, gin.H{"data": gin.H{"agent": result.Agent, "api_key": result.RawAPIKey}})
+	c.JSON(http.StatusCreated, gin.H{"data": gin.H{"agent": result.Agent, "api_key": result.RawAPIKey, "signing_secret": result.RawSigningSecret}})
 }
 
 func (h *Handler) List(c *gin.Context) {
@@ -55,10 +60,14 @@ func (h *Handler) RotateKey(c *gin.Context) {
 	}
 	result, err := h.service.RotateAPIKey(c.Request.Context(), tenantID.(string), c.Param("id"))
 	if err != nil {
+		if errors.Is(err, ErrSigningSecretUnavailable) {
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": gin.H{"code": "AGENT_AUTH_UNAVAILABLE", "message": "agent credential signing is temporarily unavailable"}})
+			return
+		}
 		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "KEY_ROTATION_FAILED", "message": err.Error()}})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"data": gin.H{"agent": result.Agent, "api_key": result.RawAPIKey}})
+	c.JSON(http.StatusOK, gin.H{"data": gin.H{"agent": result.Agent, "api_key": result.RawAPIKey, "signing_secret": result.RawSigningSecret}})
 }
 
 func (h *Handler) RevokeKey(c *gin.Context) {

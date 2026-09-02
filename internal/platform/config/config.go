@@ -1,54 +1,60 @@
 package config
 
 import (
+	"encoding/base64"
+	"encoding/hex"
 	"errors"
 	"os"
 	"strconv"
+	"strings"
 )
 
 type Config struct {
-	MySQLDSN                 string
-	RedisAddr                string
-	HTTPAddr                 string
-	SessionSecret            string
-	WebOrigin                string
-	MaxBodyBytes             int64
-	AgentReplayWindow        int64
-	AgentNonceTTL            int64
-	LLMBaseURL               string
-	LLMAPIKey                string
-	LLMModel                 string
-	OIDCIssuerURL            string
-	OIDCClientID             string
-	OIDCClientSecret         string
-	OIDCRedirectURL          string
-	OIDCTenantID             string
-	OIDCDefaultRole          string
-	WorkerConsumerID         string
-	WorkerPendingIdleSeconds int64
-	WorkerMaxAttempts        int
-	WorkerMetricsAddr        string
-	DBMaxOpenConns           int
-	DBMaxIdleConns           int
-	DBConnMaxLifetimeMinutes int
+	MySQLDSN                  string
+	RedisAddr                 string
+	HTTPAddr                  string
+	SessionSecret             string
+	WebOrigin                 string
+	MaxBodyBytes              int64
+	AgentReplayWindow         int64
+	AgentNonceTTL             int64
+	AgentSigningEncryptionKey string
+	AgentSignatureRequired    bool
+	LLMBaseURL                string
+	LLMAPIKey                 string
+	LLMModel                  string
+	OIDCIssuerURL             string
+	OIDCClientID              string
+	OIDCClientSecret          string
+	OIDCRedirectURL           string
+	OIDCTenantID              string
+	OIDCDefaultRole           string
+	WorkerConsumerID          string
+	WorkerPendingIdleSeconds  int64
+	WorkerMaxAttempts         int
+	WorkerMetricsAddr         string
+	DBMaxOpenConns            int
+	DBMaxIdleConns            int
+	DBConnMaxLifetimeMinutes  int
 }
 
 func Load() (Config, error) {
 	cfg := Config{
-		MySQLDSN:         os.Getenv("MYSQL_DSN"),
-		RedisAddr:        os.Getenv("REDIS_ADDR"),
-		HTTPAddr:         os.Getenv("HTTP_ADDR"),
-		SessionSecret:    os.Getenv("SESSION_SECRET"),
-		WebOrigin:        os.Getenv("WEB_ORIGIN"),
-		LLMBaseURL:       os.Getenv("LLM_BASE_URL"),
-		LLMAPIKey:        os.Getenv("LLM_API_KEY"),
-		LLMModel:         os.Getenv("LLM_MODEL"),
-		OIDCIssuerURL:    os.Getenv("OIDC_ISSUER_URL"),
-		OIDCClientID:     os.Getenv("OIDC_CLIENT_ID"),
-		OIDCClientSecret: os.Getenv("OIDC_CLIENT_SECRET"),
-		OIDCRedirectURL:  os.Getenv("OIDC_REDIRECT_URL"),
-		OIDCTenantID:     os.Getenv("OIDC_TENANT_ID"),
-		OIDCDefaultRole:  os.Getenv("OIDC_DEFAULT_ROLE"),
+		MySQLDSN:                  os.Getenv("MYSQL_DSN"),
+		RedisAddr:                 os.Getenv("REDIS_ADDR"),
+		HTTPAddr:                  os.Getenv("HTTP_ADDR"),
+		SessionSecret:             os.Getenv("SESSION_SECRET"),
+		WebOrigin:                 os.Getenv("WEB_ORIGIN"),
+		LLMBaseURL:                os.Getenv("LLM_BASE_URL"),
+		LLMAPIKey:                 os.Getenv("LLM_API_KEY"),
+		LLMModel:                  os.Getenv("LLM_MODEL"),
+		OIDCIssuerURL:             os.Getenv("OIDC_ISSUER_URL"),
+		OIDCClientID:              os.Getenv("OIDC_CLIENT_ID"),
+		OIDCClientSecret:          os.Getenv("OIDC_CLIENT_SECRET"),
+		OIDCRedirectURL:           os.Getenv("OIDC_REDIRECT_URL"),
+		OIDCTenantID:              os.Getenv("OIDC_TENANT_ID"),
+		OIDCDefaultRole:           os.Getenv("OIDC_DEFAULT_ROLE"),
+		AgentSigningEncryptionKey: strings.TrimSpace(os.Getenv("AGENT_SIGNING_ENCRYPTION_KEY")),
 	}
 	if cfg.MySQLDSN == "" {
 		return Config{}, errors.New("MYSQL_DSN is required")
@@ -80,6 +86,16 @@ func Load() (Config, error) {
 		return Config{}, parseErr
 	}
 	cfg.AgentNonceTTL = nonceTTL
+	cfg.AgentSignatureRequired, parseErr = readBool("AGENT_SIGNATURE_REQUIRED", false)
+	if parseErr != nil {
+		return Config{}, parseErr
+	}
+	if cfg.AgentSigningEncryptionKey != "" && !validSigningEncryptionKey(cfg.AgentSigningEncryptionKey) {
+		return Config{}, errors.New("AGENT_SIGNING_ENCRYPTION_KEY must decode to 32 bytes using hex or base64")
+	}
+	if cfg.AgentSignatureRequired && cfg.AgentSigningEncryptionKey == "" {
+		return Config{}, errors.New("AGENT_SIGNING_ENCRYPTION_KEY is required when AGENT_SIGNATURE_REQUIRED is true")
+	}
 	cfg.WorkerConsumerID = os.Getenv("WORKER_CONSUMER_ID")
 	workerIdle, parseErr := readBoundedSeconds("WORKER_PENDING_IDLE_SECONDS", 120, 30, 3600)
 	if parseErr != nil {
@@ -124,6 +140,31 @@ func Load() (Config, error) {
 		return Config{}, errors.New("LLM_MODEL is required when LLM_BASE_URL is configured")
 	}
 	return cfg, nil
+}
+
+func readBool(name string, fallback bool) (bool, error) {
+	raw := os.Getenv(name)
+	if raw == "" {
+		return fallback, nil
+	}
+	value, err := strconv.ParseBool(raw)
+	if err != nil {
+		return false, errors.New(name + " must be true or false")
+	}
+	return value, nil
+}
+
+func validSigningEncryptionKey(raw string) bool {
+	if len(raw) == 64 {
+		if decoded, err := hex.DecodeString(raw); err == nil && len(decoded) == 32 {
+			return true
+		}
+	}
+	if decoded, err := base64.StdEncoding.DecodeString(raw); err == nil && len(decoded) == 32 {
+		return true
+	}
+	decoded, err := base64.RawStdEncoding.DecodeString(raw)
+	return err == nil && len(decoded) == 32
 }
 
 func readBoundedSeconds(name string, fallback, minimum, maximum int64) (int64, error) {

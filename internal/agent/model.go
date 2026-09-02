@@ -14,17 +14,18 @@ type Agent struct {
 }
 
 type AgentCredential struct {
-	ID         string `gorm:"primaryKey;size:32"`
-	TenantID   string `gorm:"uniqueIndex:idx_agent_key_hash;size:32;not null"`
-	AgentID    string `gorm:"index;size:32;not null"`
-	KeyPrefix  string `gorm:"size:24;not null"`
-	KeyHash    string `gorm:"uniqueIndex:idx_agent_key_hash;size:64;not null"`
-	Status     string `gorm:"size:16;not null"`
-	CreatedAt  time.Time
-	RevokedAt  *time.Time
-	ExpiresAt  *time.Time `json:"expiresAt,omitempty"`
-	LastUsedAt *time.Time `json:"lastUsedAt,omitempty"`
-	LastUsedIP string     `gorm:"size:64" json:"lastUsedIp,omitempty"`
+	ID                      string `gorm:"primaryKey;size:32"`
+	TenantID                string `gorm:"uniqueIndex:idx_agent_key_hash;size:32;not null"`
+	AgentID                 string `gorm:"index;size:32;not null"`
+	KeyPrefix               string `gorm:"size:24;not null"`
+	KeyHash                 string `gorm:"uniqueIndex:idx_agent_key_hash;size:64;not null"`
+	SigningSecretCiphertext []byte `gorm:"column:signing_secret_ciphertext;type:blob" json:"-"`
+	Status                  string `gorm:"size:16;not null"`
+	CreatedAt               time.Time
+	RevokedAt               *time.Time
+	ExpiresAt               *time.Time `json:"expiresAt,omitempty"`
+	LastUsedAt              *time.Time `json:"lastUsedAt,omitempty"`
+	LastUsedIP              string     `gorm:"size:64" json:"lastUsedIp,omitempty"`
 }
 
 const (

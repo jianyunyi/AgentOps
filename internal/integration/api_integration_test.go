@@ -2,6 +2,7 @@ package integration_test
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -16,12 +17,60 @@ import (
 	"agentscope/internal/auth"
 	apihttp "agentscope/internal/http"
 	"agentscope/internal/platform/database"
+	platformredis "agentscope/internal/platform/redis"
 	"agentscope/internal/policy"
 	"agentscope/internal/risk"
 	"agentscope/internal/tenant"
 	"agentscope/internal/trace"
 	"gorm.io/gorm"
 )
+
+func TestMySQLRedisAgentHMACFlow(t *testing.T) {
+	if os.Getenv("AGENTSCOPE_INTEGRATION") != "1" {
+		t.Skip("set AGENTSCOPE_INTEGRATION=1 to run MySQL/Redis integration tests")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	db, err := database.Open(ctx, os.Getenv("MYSQL_DSN"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	sqlDB, _ := db.DB()
+	defer sqlDB.Close()
+	if err := database.Migrate(db); err != nil {
+		t.Fatal(err)
+	}
+	client := platformredis.NewClient(os.Getenv("REDIS_ADDR"))
+	defer client.Close()
+	if err := client.Ping(ctx).Err(); err != nil {
+		t.Fatal(err)
+	}
+	protector, err := agent.NewAESGCMProtector([]byte("01234567890123456789012345678901"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	tenantID := fmt.Sprintf("hmac_tenant_%d", time.Now().UnixNano())
+	svc := agent.NewServiceWithAuditAndNonceStoreAndSigning(agent.NewGORMRepository(db), nil, agent.NewRedisNonceStore(client), time.Minute, 2*time.Minute, protector, true)
+	created, err := svc.CreateAgent(ctx, agent.CreateAgentInput{TenantID: tenantID, Name: "HMAC Integration", Environment: "production"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	secret, err := base64.RawStdEncoding.DecodeString(created.RawSigningSecret)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := []byte(`{"event_id":"hmac_evt"}`)
+	timestamp := time.Now().Unix()
+	nonce := fmt.Sprintf("hmac_nonce_%d", time.Now().UnixNano())
+	metadata := agent.AuthenticationMetadata{Timestamp: timestamp, Nonce: nonce, Signature: agent.BuildAgentSignature(secret, "POST", "/api/v1/ingest/events", body, timestamp, nonce), Method: "POST", Path: "/api/v1/ingest/events", BodyHash: agent.HashRequestBody(body)}
+	identity, err := svc.AuthenticateIngestRequest(ctx, created.RawAPIKey, metadata)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if identity.TenantID != created.Agent.TenantID || identity.AgentID != created.Agent.ID {
+		t.Fatalf("identity = %+v, agent = %+v", identity, created.Agent)
+	}
+}
 
 func TestMemberAPIInvitationAndOwnerTransfer(t *testing.T) {
 	if os.Getenv("AGENTSCOPE_INTEGRATION") != "1" {

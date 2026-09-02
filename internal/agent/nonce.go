@@ -16,6 +16,10 @@ var (
 type AuthenticationMetadata struct {
 	Timestamp int64
 	Nonce     string
+	Signature string
+	Method    string
+	Path      string
+	BodyHash  string
 }
 
 type NonceStore interface {

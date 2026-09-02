@@ -1,8 +1,10 @@
 package trace
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -53,6 +55,12 @@ func (h *Handler) ingest(c *gin.Context) {
 }
 
 func (h *Handler) authenticateIngest(c *gin.Context) (agent.Identity, bool) {
+	body, err := io.ReadAll(c.Request.Body)
+	if err != nil {
+		writeError(c, http.StatusBadRequest, "INVALID_EVENT", "request body is invalid")
+		return agent.Identity{}, false
+	}
+	c.Request.Body = io.NopCloser(bytes.NewReader(body))
 	timestamp, err := strconv.ParseInt(strings.TrimSpace(c.GetHeader("X-Agent-Timestamp")), 10, 64)
 	if err != nil {
 		writeError(c, http.StatusBadRequest, "INVALID_AGENT_REQUEST", "agent timestamp and nonce are required")
@@ -68,7 +76,14 @@ func (h *Handler) authenticateIngest(c *gin.Context) (agent.Identity, bool) {
 		writeError(c, http.StatusUnauthorized, "UNAUTHORIZED_AGENT", "agent authorization is required")
 		return agent.Identity{}, false
 	}
-	identity, err := h.authenticator.AuthenticateIngestRequest(c.Request.Context(), strings.TrimSpace(strings.TrimPrefix(header, "Bearer ")), agent.AuthenticationMetadata{Timestamp: timestamp, Nonce: nonce})
+	identity, err := h.authenticator.AuthenticateIngestRequest(c.Request.Context(), strings.TrimSpace(strings.TrimPrefix(header, "Bearer ")), agent.AuthenticationMetadata{
+		Timestamp: timestamp,
+		Nonce:     nonce,
+		Signature: strings.TrimSpace(c.GetHeader("X-Agent-Signature")),
+		Method:    c.Request.Method,
+		Path:      c.Request.URL.Path,
+		BodyHash:  agent.HashRequestBody(body),
+	})
 	if err != nil {
 		switch {
 		case errors.Is(err, agent.ErrInvalidAgentRequest):
@@ -77,6 +92,10 @@ func (h *Handler) authenticateIngest(c *gin.Context) (agent.Identity, bool) {
 			writeError(c, http.StatusConflict, "REPLAY_DETECTED", "agent request has already been accepted")
 		case errors.Is(err, agent.ErrNonceStoreUnavailable):
 			writeError(c, http.StatusServiceUnavailable, "AGENT_AUTH_UNAVAILABLE", "agent authorization is temporarily unavailable")
+		case errors.Is(err, agent.ErrSigningSecretUnavailable):
+			writeError(c, http.StatusServiceUnavailable, "AGENT_AUTH_UNAVAILABLE", "agent authorization is temporarily unavailable")
+		case errors.Is(err, agent.ErrSignatureRequired), errors.Is(err, agent.ErrInvalidAgentSignature):
+			writeError(c, http.StatusUnauthorized, "UNAUTHORIZED_AGENT", "agent signature is invalid")
 		default:
 			writeError(c, http.StatusUnauthorized, "UNAUTHORIZED_AGENT", "agent authorization is invalid")
 		}

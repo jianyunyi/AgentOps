@@ -13,6 +13,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return body.data;
 }
 export const listAgents = () => request<Agent[]>("/api/v1/agents");
-export const createAgent = (input: { name: string; description: string; environment: string }) => request<{ agent: Agent; api_key: string }>("/api/v1/agents", { method: "POST", body: JSON.stringify(input) });
-export const rotateAgentKey = (id: string) => request<{ agent: Agent; api_key: string }>(`/api/v1/agents/${encodeURIComponent(id)}/rotate-key`, { method: "POST" });
+export type AgentCredentialReveal = { agent: Agent; api_key: string; signing_secret: string };
+export const createAgent = (input: { name: string; description: string; environment: string }) => request<AgentCredentialReveal>("/api/v1/agents", { method: "POST", body: JSON.stringify(input) });
+export const rotateAgentKey = (id: string) => request<AgentCredentialReveal>(`/api/v1/agents/${encodeURIComponent(id)}/rotate-key`, { method: "POST" });
 export const revokeAgentKey = (id: string) => request<null>(`/api/v1/agents/${encodeURIComponent(id)}/revoke-key`, { method: "POST" });

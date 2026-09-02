@@ -44,9 +44,16 @@ func main() {
 	redisClient := platformredis.NewClient(cfg.RedisAddr)
 	agentRepo := agent.NewGORMRepository(db)
 	auditService := audit.NewService(audit.NewGORMRepository(db))
+	var signingProtector agent.SigningSecretProtector
+	if cfg.AgentSigningEncryptionKey != "" {
+		signingProtector, err = agent.NewAESGCMProtectorFromString(cfg.AgentSigningEncryptionKey)
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
 	policyService := policy.NewService(policy.NewGORMRepository(db))
 	riskService := risk.NewServiceWithPolicy(risk.NewGORMRepository(db), nil, policyService)
-	agentService := agent.NewServiceWithAuditAndNonceStore(agentRepo, auditService, agent.NewRedisNonceStore(redisClient), time.Duration(cfg.AgentReplayWindow)*time.Second, time.Duration(cfg.AgentNonceTTL)*time.Second)
+	agentService := agent.NewServiceWithAuditAndNonceStoreAndSigning(agentRepo, auditService, agent.NewRedisNonceStore(redisClient), time.Duration(cfg.AgentReplayWindow)*time.Second, time.Duration(cfg.AgentNonceTTL)*time.Second, signingProtector, cfg.AgentSignatureRequired)
 	authRepo := auth.NewGORMRepository(db)
 	authService := auth.NewServiceWithAudit(authRepo, cfg.SessionSecret, auditService)
 	var oidcService *auth.OIDCService

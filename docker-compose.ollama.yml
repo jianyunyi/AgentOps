@@ -7,6 +7,8 @@ services:
     healthcheck: { test: ["CMD", "ollama", "list"], interval: 10s, timeout: 5s, retries: 12 }
   worker:
     environment:
+      AGENT_SIGNING_ENCRYPTION_KEY: ${AGENT_SIGNING_ENCRYPTION_KEY:?AGENT_SIGNING_ENCRYPTION_KEY is required}
+      AGENT_SIGNATURE_REQUIRED: ${AGENT_SIGNATURE_REQUIRED:-true}
       LLM_BASE_URL: http://ollama:11434/v1
       LLM_API_KEY: ollama
       LLM_MODEL: ${LLM_MODEL:-qwen2.5:7b}

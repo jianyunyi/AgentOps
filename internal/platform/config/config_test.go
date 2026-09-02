@@ -26,6 +26,31 @@ func TestLoadReadsRequiredConfiguration(t *testing.T) {
 	if got.MySQLDSN == "" || got.RedisAddr == "" || got.HTTPAddr == "" || got.SessionSecret == "" {
 		t.Fatalf("Load() returned incomplete config: %+v", got)
 	}
+	if got.AgentSignatureRequired {
+		t.Fatal("agent signature should be optional by default")
+	}
+}
+
+func TestLoadReadsAgentSigningConfiguration(t *testing.T) {
+	setRequiredEnvironment(t)
+	t.Setenv("AGENT_SIGNING_ENCRYPTION_KEY", "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
+	t.Setenv("AGENT_SIGNATURE_REQUIRED", "true")
+	got, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.AgentSigningEncryptionKey == "" || !got.AgentSignatureRequired {
+		t.Fatalf("agent signing config = %+v", got)
+	}
+}
+
+func TestLoadRejectsRequiredAgentSigningWithoutEncryptionKey(t *testing.T) {
+	setRequiredEnvironment(t)
+	t.Setenv("AGENT_SIGNING_ENCRYPTION_KEY", "")
+	t.Setenv("AGENT_SIGNATURE_REQUIRED", "true")
+	if _, err := Load(); err == nil {
+		t.Fatal("required agent signing without encryption key must be rejected")
+	}
 }
 
 func TestLoadUsesReplayProtectionDefaults(t *testing.T) {

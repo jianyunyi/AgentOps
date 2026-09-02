@@ -25,6 +25,7 @@ var migrations = []migration{
 	{Version: 2, Name: "p0_consistency_and_credentials", Apply: migrateP0Schema},
 	{Version: 3, Name: "phase3_members_and_sso", Apply: migratePhase3Schema},
 	{Version: 4, Name: "phase5_ai_policies", Apply: migratePhase5Schema},
+	{Version: 5, Name: "agent_signing_secret", Apply: migrateAgentSigningSecret},
 }
 
 // Migrate applies each schema version exactly once. Production deployments can
@@ -66,6 +67,8 @@ func migratePhase3Schema(db *gorm.DB) error {
 }
 
 func migratePhase5Schema(db *gorm.DB) error { return db.AutoMigrate(&policy.Policy{}) }
+
+func migrateAgentSigningSecret(db *gorm.DB) error { return db.AutoMigrate(&agent.AgentCredential{}) }
 
 func MigrationVersions() []uint64 {
 	versions := make([]uint64, len(migrations))
