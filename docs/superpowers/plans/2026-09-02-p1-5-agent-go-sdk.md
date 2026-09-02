@@ -24,7 +24,7 @@ Test that an empty URL, non-HTTP(S) URL, empty API key, empty signing secret, an
 
 - [ ] **Step 2: Run the focused test**
 
-Run `go test ./sdk/go/agentops -run TestNewClientConfig -count=1` from the repository root. Expected: FAIL because the SDK package does not exist.
+Run `Push-Location sdk/go; go test ./agentops -run TestNewClientConfig -count=1; Pop-Location`. Expected: FAIL because the SDK package does not exist.
 
 - [ ] **Step 3: Implement module and types**
 
@@ -32,7 +32,7 @@ Define module `github.com/jianyunyi/AgentOps/sdk/go`, public `Event`, `IngestRes
 
 - [ ] **Step 4: Run the focused test**
 
-Run `go test ./sdk/go/agentops -run TestNewClientConfig -count=1`. Expected: PASS.
+Run `Push-Location sdk/go; go test ./agentops -run TestNewClientConfig -count=1; Pop-Location`. Expected: PASS.
 
 ### Task 2: Implement protocol signing and nonce generation
 
@@ -46,7 +46,7 @@ Assert the exact body hash, canonical string, lowercase `v1=` signature, and tha
 
 - [ ] **Step 2: Run the focused test**
 
-Run `go test ./sdk/go/agentops -run 'Test(Signature|Nonce)' -count=1`. Expected: FAIL because signing functions do not exist.
+Run `Push-Location sdk/go; go test ./agentops -run 'Test(Signature|Nonce)' -count=1; Pop-Location`. Expected: FAIL because signing functions do not exist.
 
 - [ ] **Step 3: Implement signing**
 
@@ -54,7 +54,7 @@ Implement `hashBody`, `canonicalRequest`, `signRequest`, and `newNonce` with sta
 
 - [ ] **Step 4: Run the focused test**
 
-Run the same command and expect PASS.
+Run `Push-Location sdk/go; go test ./agentops -run 'Test(Signature|Nonce)' -count=1; Pop-Location` and expect PASS.
 
 ### Task 3: Implement typed errors and safe response parsing
 
@@ -72,7 +72,7 @@ Define `APIError` with `StatusCode`, `Code`, `Message`, `RequestID`, and `RetryA
 
 - [ ] **Step 3: Run tests**
 
-Run `go test ./sdk/go/agentops -run 'Test(APIError|Retry)' -count=1`. Expected: PASS.
+Run `Push-Location sdk/go; go test ./agentops -run 'Test(APIError|Retry)' -count=1; Pop-Location`. Expected: PASS.
 
 ### Task 4: Implement ingest transport and retry loop
 
@@ -95,7 +95,7 @@ Retry only the classified transport/status failures while attempts remain. Use `
 
 - [ ] **Step 4: Run tests**
 
-Run `go test ./sdk/go/agentops -count=1`. Expected: PASS.
+Run `Push-Location sdk/go; go test ./agentops -count=1; Pop-Location`. Expected: PASS.
 
 ### Task 5: Add integration test, examples, and documentation
 
@@ -115,7 +115,7 @@ Document `go get github.com/jianyunyi/AgentOps/sdk/go`, environment-based creden
 
 - [ ] **Step 3: Run SDK tests and vet**
 
-Run `go test ./sdk/go/... -count=1` and `go vet ./sdk/go/...`. Expected: PASS.
+Run `Push-Location sdk/go; go test ./... -count=1; go vet ./...; Pop-Location`. Expected: PASS.
 
 ### Task 6: Full verification and delivery
 
@@ -124,7 +124,7 @@ Run `go test ./sdk/go/... -count=1` and `go vet ./sdk/go/...`. Expected: PASS.
 
 - [ ] **Step 1: Run repository checks**
 
-Run `go test ./... -count=1`, `go vet ./...`, `go test ./sdk/go/... -count=1`, and the frontend test/build commands. Expected: all PASS.
+Run `go test ./... -count=1`, `go vet ./...`, `Push-Location sdk/go; go test ./... -count=1; go vet ./...; Pop-Location`, and the frontend test/build commands. Expected: all PASS.
 
 - [ ] **Step 2: Run real dependency integration**
 

@@ -36,6 +36,9 @@ jobs:
           go-version: '1.25.13'
       - run: go test ./...
       - run: go vet ./...
+      - name: Go SDK tests and vet
+        working-directory: sdk/go
+        run: go test ./... -count=1 && go vet ./...
       - name: MySQL Redis integration tests
         env:
           AGENTSCOPE_INTEGRATION: "1"
@@ -70,6 +73,9 @@ jobs:
         run: |
           go install golang.org/x/vuln/cmd/govulncheck@latest
           govulncheck ./...
+      - name: Go SDK vulnerability scan
+        working-directory: sdk/go
+        run: govulncheck ./...
       - uses: actions/setup-node@v4
         with:
           node-version: 22
