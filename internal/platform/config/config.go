@@ -13,6 +13,8 @@ type Config struct {
 	SessionSecret            string
 	WebOrigin                string
 	MaxBodyBytes             int64
+	AgentReplayWindow        int64
+	AgentNonceTTL            int64
 	LLMBaseURL               string
 	LLMAPIKey                string
 	LLMModel                 string
@@ -64,6 +66,16 @@ func Load() (Config, error) {
 		}
 		cfg.MaxBodyBytes = value
 	}
+	replayWindow, parseErr := readBoundedSeconds("AGENT_REPLAY_WINDOW_SECONDS", 300, 30, 900)
+	if parseErr != nil {
+		return Config{}, parseErr
+	}
+	cfg.AgentReplayWindow = replayWindow
+	nonceTTL, parseErr := readBoundedSeconds("AGENT_NONCE_TTL_SECONDS", 600, 60, 3600)
+	if parseErr != nil {
+		return Config{}, parseErr
+	}
+	cfg.AgentNonceTTL = nonceTTL
 	cfg.DBMaxOpenConns, cfg.DBMaxIdleConns, cfg.DBConnMaxLifetimeMinutes = 50, 10, 30
 	if raw := os.Getenv("DB_MAX_OPEN_CONNS"); raw != "" {
 		value, err := strconv.Atoi(raw)
@@ -93,4 +105,16 @@ func Load() (Config, error) {
 		return Config{}, errors.New("LLM_MODEL is required when LLM_BASE_URL is configured")
 	}
 	return cfg, nil
+}
+
+func readBoundedSeconds(name string, fallback, minimum, maximum int64) (int64, error) {
+	raw := os.Getenv(name)
+	if raw == "" {
+		return fallback, nil
+	}
+	value, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil || value < minimum || value > maximum {
+		return 0, errors.New(name + " must be between " + strconv.FormatInt(minimum, 10) + " and " + strconv.FormatInt(maximum, 10) + " seconds")
+	}
+	return value, nil
 }
