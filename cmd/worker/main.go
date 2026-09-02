@@ -36,8 +36,8 @@ func main() {
 	policyService := policy.NewService(policy.NewGORMRepository(db))
 	riskService := risk.NewServiceWithPolicy(risk.NewGORMRepository(db), llm, policyService)
 	client := platformredis.NewClient(cfg.RedisAddr)
-	consumer := worker.NewStreamConsumer(client)
-	processor := worker.NewAnalysisProcessor(3, func(ctx context.Context, message worker.AnalysisMessage) error {
+	consumer := worker.NewConfiguredStreamConsumer(client, cfg.WorkerConsumerID, time.Duration(cfg.WorkerPendingIdleSeconds)*time.Second)
+	processor := worker.NewAnalysisProcessor(cfg.WorkerMaxAttempts, func(ctx context.Context, message worker.AnalysisMessage) error {
 		_, err := riskService.AnalyzeAndPersist(ctx, message.TenantID, message.TraceID, message.SpanID, message.Input)
 		return err
 	})

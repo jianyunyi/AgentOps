@@ -24,6 +24,9 @@ type Config struct {
 	OIDCRedirectURL          string
 	OIDCTenantID             string
 	OIDCDefaultRole          string
+	WorkerConsumerID         string
+	WorkerPendingIdleSeconds int64
+	WorkerMaxAttempts        int
 	DBMaxOpenConns           int
 	DBMaxIdleConns           int
 	DBConnMaxLifetimeMinutes int
@@ -76,6 +79,17 @@ func Load() (Config, error) {
 		return Config{}, parseErr
 	}
 	cfg.AgentNonceTTL = nonceTTL
+	cfg.WorkerConsumerID = os.Getenv("WORKER_CONSUMER_ID")
+	workerIdle, parseErr := readBoundedSeconds("WORKER_PENDING_IDLE_SECONDS", 120, 30, 3600)
+	if parseErr != nil {
+		return Config{}, parseErr
+	}
+	cfg.WorkerPendingIdleSeconds = workerIdle
+	workerAttempts, parseErr := readBoundedInt("WORKER_MAX_ATTEMPTS", 3, 1, 20)
+	if parseErr != nil {
+		return Config{}, parseErr
+	}
+	cfg.WorkerMaxAttempts = workerAttempts
 	cfg.DBMaxOpenConns, cfg.DBMaxIdleConns, cfg.DBConnMaxLifetimeMinutes = 50, 10, 30
 	if raw := os.Getenv("DB_MAX_OPEN_CONNS"); raw != "" {
 		value, err := strconv.Atoi(raw)
@@ -115,6 +129,18 @@ func readBoundedSeconds(name string, fallback, minimum, maximum int64) (int64, e
 	value, err := strconv.ParseInt(raw, 10, 64)
 	if err != nil || value < minimum || value > maximum {
 		return 0, errors.New(name + " must be between " + strconv.FormatInt(minimum, 10) + " and " + strconv.FormatInt(maximum, 10) + " seconds")
+	}
+	return value, nil
+}
+
+func readBoundedInt(name string, fallback, minimum, maximum int) (int, error) {
+	raw := os.Getenv(name)
+	if raw == "" {
+		return fallback, nil
+	}
+	value, err := strconv.Atoi(raw)
+	if err != nil || value < minimum || value > maximum {
+		return 0, errors.New(name + " must be between " + strconv.Itoa(minimum) + " and " + strconv.Itoa(maximum))
 	}
 	return value, nil
 }

@@ -16,12 +16,12 @@ const (
 )
 
 type AnalysisMessage struct {
-	Version  string
-	TenantID string
-	EventID  string
-	TraceID  string
-	SpanID   string
-	Input    string
+	Version  string `json:"version"`
+	TenantID string `json:"tenant_id"`
+	EventID  string `json:"event_id"`
+	TraceID  string `json:"trace_id"`
+	SpanID   string `json:"span_id"`
+	Input    string `json:"input"`
 }
 
 type Analyzer func(ctx context.Context, message AnalysisMessage) error
