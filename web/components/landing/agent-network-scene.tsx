@@ -1,7 +1,8 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useMemo, type CSSProperties } from "react";
+import * as THREE from "three";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 
 type NetworkNode = {
   id: string;
@@ -34,6 +35,97 @@ const edgeStyle = (angle: number, length: number): CSSProperties => ({ "--edge-a
 export function AgentNetworkScene() {
   const router = useRouter();
   const nodeMap = useMemo(() => new Map(nodes.map((node) => [node.id, node])), []);
+  const stageRef = useRef<HTMLDivElement>(null);
+  const [webglFallback, setWebglFallback] = useState(false);
+
+  useEffect(() => {
+    const stage = stageRef.current;
+    if (!stage) return;
+
+    let frameId = 0;
+    let renderer: THREE.WebGLRenderer | null = null;
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 100);
+    const group = new THREE.Group();
+    const core = new THREE.Mesh(
+      new THREE.IcosahedronGeometry(0.58, 1),
+      new THREE.MeshBasicMaterial({ color: 0x67f4d2, wireframe: true, transparent: true, opacity: 0.68 }),
+    );
+
+    const webglAvailable = typeof window !== "undefined" && ("WebGLRenderingContext" in window || "WebGL2RenderingContext" in window);
+    if (!webglAvailable) {
+      setWebglFallback(true);
+      core.geometry.dispose();
+      (core.material as THREE.Material).dispose();
+      return;
+    }
+
+    try {
+      renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true, powerPreference: "low-power" });
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+      renderer.domElement.className = "network-canvas";
+      renderer.domElement.setAttribute("aria-hidden", "true");
+      stage.prepend(renderer.domElement);
+      camera.position.z = 5.4;
+      group.add(core);
+
+      const pointById = new Map(nodes.map((node, index) => [node.id, new THREE.Vector3((node.x - 50) / 32, (50 - node.y) / 30, node.z / 38)]));
+      const lineMaterial = new THREE.LineBasicMaterial({ color: 0x67f4d2, transparent: true, opacity: 0.32 });
+      for (const edge of edges) {
+        const start = pointById.get(edge.from);
+        const end = pointById.get(edge.to);
+        if (!start || !end) continue;
+        group.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([start, end]), lineMaterial));
+      }
+      nodes.forEach((node) => {
+        const material = new THREE.MeshBasicMaterial({ color: node.kind === "risk" ? 0xff966b : node.kind === "trace" ? 0x789bff : 0x67f4d2 });
+        const mesh = new THREE.Mesh(new THREE.SphereGeometry(node.kind === "agent" ? 0.14 : 0.09, 12, 8), material);
+        mesh.position.copy(pointById.get(node.id) ?? new THREE.Vector3());
+        group.add(mesh);
+      });
+      scene.add(group);
+
+      const resize = () => {
+        if (!renderer) return;
+        const width = stage.clientWidth || 640;
+        const height = stage.clientHeight || 420;
+        renderer.setSize(width, height, false);
+        camera.aspect = width / height;
+        camera.updateProjectionMatrix();
+      };
+      resize();
+      const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      const renderFrame = () => {
+        if (!renderer) return;
+        if (!reducedMotion) {
+          group.rotation.y += 0.0018;
+          core.rotation.z += 0.002;
+        }
+        renderer.render(scene, camera);
+        if (!reducedMotion) frameId = window.requestAnimationFrame(renderFrame);
+      };
+      window.addEventListener("resize", resize);
+      renderFrame();
+      return () => {
+        window.removeEventListener("resize", resize);
+        window.cancelAnimationFrame(frameId);
+        group.traverse((object) => {
+          if (!(object instanceof THREE.Mesh) && !(object instanceof THREE.Line)) return;
+          object.geometry.dispose();
+          if (Array.isArray(object.material)) object.material.forEach((material) => material.dispose());
+          else object.material.dispose();
+        });
+        renderer?.dispose();
+        renderer?.forceContextLoss();
+        renderer?.domElement.remove();
+      };
+    } catch {
+      setWebglFallback(true);
+      core.geometry.dispose();
+      (core.material as THREE.Material).dispose();
+      return () => { window.cancelAnimationFrame(frameId); };
+    }
+  }, []);
 
   return (
     <section className="network-scene" aria-labelledby="network-scene-title">
@@ -44,7 +136,7 @@ export function AgentNetworkScene() {
         </div>
         <span className="network-live"><i aria-hidden="true" /> Event flow active</span>
       </div>
-      <div className="network-stage" role="img" aria-label="Agent network visualization">
+      <div className={`network-stage${webglFallback ? " network-stage--fallback" : ""}`} ref={stageRef} role="img" aria-label="Agent network visualization">
         <div className="network-halo" aria-hidden="true" />
         <div className="network-orbit network-orbit--one" aria-hidden="true" />
         <div className="network-orbit network-orbit--two" aria-hidden="true" />
