@@ -20,6 +20,8 @@ describe("TraceTable", () => {
 
     expect(screen.getByText("IT Ops Agent")).toBeInTheDocument();
     expect(screen.getByText("high")).toBeInTheDocument();
+    expect(screen.getByText("success")).toHaveClass("status-badge--healthy");
+    expect(screen.getByText("high")).toHaveClass("status-badge--danger");
     expect(screen.getByText("1,580")).toBeInTheDocument();
   });
 

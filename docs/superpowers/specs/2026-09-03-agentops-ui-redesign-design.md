@@ -43,7 +43,7 @@ Existing routes keep their URL paths and API contracts. They will share the same
 
 ## Agent Network Scene
 
-The visualization is a low-poly Three.js scene generated from domain semantics rather than a decorative external model. Nodes represent Agents, Traces, Policies, Risks, and Audit evidence. Edges represent operational relationships and animated light trails represent event flow.
+The visualization is a dependency-free CSS 3D scene generated from domain semantics rather than a decorative external model. Perspective transforms, orbit rings, depth, and animated light trails provide the spatial model without adding a large runtime package. Nodes represent Agents, Traces, Policies, Risks, and Audit evidence. The scene interface is isolated so a future WebGL renderer can replace it without changing page composition.
 
 The scene must:
 
@@ -51,8 +51,8 @@ The scene must:
 - Accept a small typed topology model so real API data can be connected later without changing rendering code.
 - Support pointer hover, keyboard focus, and Enter navigation for semantic nodes.
 - Keep hover informational and navigation explicit.
-- Use `requestAnimationFrame` with cancellation and dispose all Three.js resources on unmount.
-- Use a static 2D fallback when WebGL is unavailable.
+- Use CSS animation only for the current implementation, with no timers or global event listeners.
+- Keep the semantic node list usable when visual effects are disabled.
 - Reduce or stop nonessential movement under `prefers-reduced-motion`.
 - Avoid logging secrets or sensitive event payloads in the browser.
 
@@ -71,7 +71,7 @@ No continuous animation will be applied to dense tables or every card. The anima
 
 - `web/app/page.tsx`: server-rendered root page composition and static copy.
 - `web/components/layout/console-shell.tsx`: shared navigation, tenant context, and sign-out affordance.
-- `web/components/landing/agent-network-scene.tsx`: client-only 3D scene, fallback, and node interaction.
+- `web/components/landing/agent-network-scene.tsx`: client-only CSS 3D scene, semantic node interaction, and reduced-motion behavior.
 - `web/components/ui/*`: shared buttons, panels, status badges, and state views.
 - `web/app/globals.css`: design tokens, layout primitives, backgrounds, responsive rules, and reduced-motion styles.
 
@@ -81,7 +81,7 @@ Interactive or animation-heavy code must stay in client leaf components. Static 
 
 - Desktop uses an asymmetric two-column hero with the 3D scene on the right.
 - Below tablet width, content stacks with copy first and the scene second.
-- On mobile, the scene uses a compact static 2D network summary if performance or WebGL support is insufficient.
+- On mobile, the scene uses a compact perspective network summary with the semantic node list kept available below it.
 - Every semantic node has an accessible label and keyboard focus state.
 - Buttons and form controls maintain readable contrast and never wrap their primary labels.
 - `prefers-reduced-motion` removes camera drift, pulses, and entrance transforms while preserving state and hierarchy.
@@ -98,7 +98,7 @@ Interactive or animation-heavy code must stay in client leaf components. Static 
 
 - Run the existing web unit tests and add coverage for the root page, node navigation, and fallback rendering.
 - Run TypeScript type checking and the Next.js production build.
-- Manually verify desktop and mobile layouts, keyboard navigation, WebGL fallback, reduced motion, loading, empty, error, and permission-denied states.
+- Manually verify desktop and mobile layouts, keyboard navigation, reduced motion, loading, empty, error, and permission-denied states.
 - Run the Go regression suite because shared API contracts remain in scope.
 
 ## Out of Scope
@@ -106,4 +106,4 @@ Interactive or animation-heavy code must stay in client leaf components. Static 
 - No new backend endpoints or schema changes.
 - No changes to authentication behavior or permission semantics.
 - No full spatial navigation for the entire application.
-- No external 3D asset pipeline or model marketplace dependency.
+- No external 3D asset pipeline, model marketplace dependency, or WebGL package in the first release.

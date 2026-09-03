@@ -4,9 +4,9 @@
 
 **Goal:** Rebuild the AgentOps console shell and root Overview with a memorable Agent network visualization, fluid motion, and production-safe states while preserving existing routes, API contracts, authentication, and permissions.
 
-**Architecture:** Keep static page composition in Server Components and isolate browser-only behavior in small Client Components. The root page uses a shared console shell, real API-backed signal cards, and a Three.js network scene with a static fallback. Existing dense screens reuse the same tokens and state primitives without adopting spatial navigation.
+**Architecture:** Keep static page composition in Server Components and isolate browser-only behavior in small Client Components. The root page uses a shared console shell, real API-backed signal cards, and a dependency-free CSS 3D network scene. Existing dense screens reuse the same tokens and state primitives without adopting spatial navigation.
 
-**Tech Stack:** Next.js 16, React 19, TypeScript, native CSS design tokens, Three.js, Vitest, Testing Library.
+**Tech Stack:** Next.js 16, React 19, TypeScript, native CSS design tokens with CSS 3D transforms and animations, Vitest, Testing Library.
 
 ---
 
@@ -15,7 +15,7 @@
 - Create `web/app/page.tsx`: authenticated console Overview composition.
 - Create `web/components/layout/console-shell.tsx`: shared navigation, tenant context, and sign-out action.
 - Create `web/components/layout/console-shell.test.tsx`: navigation and sign-out behavior.
-- Create `web/components/landing/agent-network-scene.tsx`: isolated Three.js scene with keyboard interaction and static fallback.
+- Create `web/components/landing/agent-network-scene.tsx`: isolated CSS 3D scene with keyboard interaction and semantic fallback.
 - Create `web/components/landing/agent-network-scene.test.tsx`: fallback, labels, reduced-motion, and navigation tests.
 - Create `web/components/landing/overview-signals.tsx`: client data loader for agents, traces, risk events, and permission-aware states.
 - Create `web/components/landing/overview-signals.test.tsx`: loading, success, empty, failure, and permission states.
@@ -25,7 +25,6 @@
 - Modify `web/app/globals.css`: replace starter CSS with the approved token system, responsive layout, fluid background, table primitives, and reduced-motion rules.
 - Modify `web/app/login/page.tsx`: apply the new auth composition and explicit error/loading state.
 - Modify `web/app/dashboard/traces/page.tsx`, `web/app/dashboard/risk/page.tsx`, `web/app/dashboard/traces/[traceId]/page.tsx`, `web/app/settings/agents/page.tsx`, `web/app/settings/members/page.tsx`, `web/app/settings/policies/page.tsx`, and `web/app/settings/audit/page.tsx`: wrap content in the shared shell and replace ad hoc visual classes with the common primitives without changing API calls or permission checks.
-- Modify `web/package.json` and `web/package-lock.json`: add `three` and `@types/three`.
 
 ### Task 1: Add the shared visual foundation
 
@@ -125,18 +124,10 @@ Commit: `git add web/app/page.tsx web/components/landing web/lib/api/overview.ts
 ### Task 3: Add the Agent network 3D scene and fallback
 
 **Files:**
-- Modify `web/package.json`
-- Modify `web/package-lock.json`
 - Create `web/components/landing/agent-network-scene.tsx`
 - Create `web/components/landing/agent-network-scene.test.tsx`
 
-- [ ] **Step 1: Add the minimal Three.js dependencies**
-
-Run from `web`: `npm install three@0.178.0 && npm install --save-dev @types/three@0.178.0`.
-
-Expected: `package.json` and `package-lock.json` contain only the two new packages and the install exits successfully.
-
-- [ ] **Step 2: Write failing tests for fallback and accessible nodes**
+- [ ] **Step 1: Write failing tests for the 3D scene and accessible nodes**
 
 ```tsx
 it("renders the static network fallback when WebGL is unavailable", () => {
@@ -153,27 +144,27 @@ it("navigates a focused semantic node on Enter", async () => {
 });
 ```
 
-- [ ] **Step 3: Run the tests and verify they fail**
+- [ ] **Step 2: Run the tests and verify they fail**
 
 Run: `npm test -- --run components/landing/agent-network-scene.test.tsx`.
 
 Expected: FAIL because the scene component does not exist.
 
-- [ ] **Step 4: Implement the isolated client scene**
+- [ ] **Step 3: Implement the isolated client scene**
 
-Add `"use client"`. Define a typed topology array with `agent`, `trace`, `policy`, `risk`, and `audit` nodes. Create a Three.js `Scene`, `PerspectiveCamera`, `WebGLRenderer`, low-poly spheres, line segments, and a small number of animated flow particles. Store the renderer, scene objects, animation frame id, resize observer, and pointer handlers in refs. Use `requestAnimationFrame` only while mounted, cancel it in cleanup, dispose geometries/materials, remove the renderer element, and disconnect the observer. Expose semantic HTML buttons over the canvas for keyboard and screen-reader access. Use `useRouter` for explicit navigation. If renderer creation fails, render an `aria-label="Agent network visualization"` static fallback with the same node buttons.
+Add `"use client"`. Define a typed topology array with `agent`, `trace`, `policy`, `risk`, and `audit` nodes. Render the topology as a perspective CSS 3D stage with orbit rings, depth, a faceted core, edges, and a small number of animated flow pulses. Expose semantic HTML buttons for keyboard and screen-reader access and use `useRouter` for explicit navigation. Keep the scene dependency-free.
 
-- [ ] **Step 5: Add reduced-motion and responsive behavior**
+- [ ] **Step 4: Add reduced-motion and responsive behavior**
 
 Read `window.matchMedia("(prefers-reduced-motion: reduce)")` inside the client component. In reduced-motion mode, render the scene without camera drift or particle animation. At mobile widths, use a compact scene height and keep buttons in a scrollable accessible list below the canvas. Ensure the component does not use `window.addEventListener("scroll")`.
 
-- [ ] **Step 6: Run focused tests and commit**
+- [ ] **Step 5: Run focused tests and commit**
 
 Run: `npm test -- --run components/landing/agent-network-scene.test.tsx`.
 
 Expected: PASS.
 
-Commit: `git add web/package.json web/package-lock.json web/components/landing/agent-network-scene.tsx web/components/landing/agent-network-scene.test.tsx && git commit -m "feat: add Agent network visualization"`
+Commit: `git add web/components/landing/agent-network-scene.tsx web/components/landing/agent-network-scene.test.tsx && git commit -m "feat: add Agent network visualization"`
 
 ### Task 4: Upgrade login and existing console routes
 
@@ -234,11 +225,11 @@ Expected: Next.js production build completes successfully with no client/server 
 
 Run from `web`: `npm audit --audit-level=high`.
 
-Expected: no high or critical vulnerabilities introduced by Three.js.
+Expected: no high or critical vulnerabilities introduced by the UI changes.
 
 - [ ] **Step 4: Perform manual visual QA**
 
-Start the console with `npm run dev` and check `/`, `/login`, `/dashboard/traces`, `/dashboard/risk`, `/settings/agents`, `/settings/members`, `/settings/policies`, and `/settings/audit` at desktop and mobile widths. Verify keyboard focus, Enter navigation in the network, no-WebGL fallback, reduced motion, loading, empty, error, and permission-denied states. Confirm no API key, signing secret, or sensitive payload appears in browser logs.
+Start the console with `npm run dev` and check `/`, `/login`, `/dashboard/traces`, `/dashboard/risk`, `/settings/agents`, `/settings/members`, `/settings/policies`, and `/settings/audit` at desktop and mobile widths. Verify keyboard focus, Enter navigation in the network, reduced motion, loading, empty, error, and permission-denied states. Confirm no API key, signing secret, or sensitive payload appears in browser logs.
 
 - [ ] **Step 5: Final commit**
 
@@ -250,7 +241,7 @@ Commit: `git add web && git commit -m "chore: verify AgentOps console UI release
 
 ## Plan Self-Review
 
-- Spec coverage: visual tokens, Control Room layout, Three.js topology, fluid motion, fallback, accessibility, API-backed signals, stable routes, security constraints, and verification are covered by Tasks 1 through 5.
+- Spec coverage: visual tokens, Control Room layout, CSS 3D topology, fluid motion, semantic fallback, accessibility, API-backed signals, stable routes, security constraints, and verification are covered by Tasks 1 through 5.
 - Completeness scan: no unfinished work markers or vague implementation steps are used in the plan.
 - Type consistency: `OverviewSignals` consumes `getOverviewData` with `{ agents, traces, risks }`; `AgentNetworkScene` consumes the typed topology and exposes node navigation; `ConsoleShell` owns navigation and sign-out.
 - Scope check: no backend endpoint, database schema, auth contract, or full-app spatial navigation is introduced.
