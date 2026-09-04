@@ -52,42 +52,63 @@ export function buildControlTowerModel(
       .filter((risk) => risk.risk_level === "critical")
       .map((risk) => risk.trace_id),
   );
-  const tracesWithCriticalRisk = new Set(
-    data.traces
-      .filter((trace) => criticalRiskTraceIds.has(trace.traceId))
-      .map((trace) => trace.agentName),
-  );
 
-  const nodes = data.agents.slice(0, positions.length).map((agent, index) => {
-    const [x, y, z] = positions[index];
-    const tone: SectorTone = tracesWithCriticalRisk.has(agent.name)
-      ? "critical"
-      : agent.status === "active"
-        ? "healthy"
-        : "degraded";
+  const baseNodes = data.agents
+    .slice(0, positions.length)
+    .map((agent, index) => {
+      const [x, y, z] = positions[index];
+      const tone: SectorTone =
+        agent.status === "active" ? "healthy" : "degraded";
 
-    return {
-      id: agent.id,
-      label: agent.name,
-      callsign: `AGT_${String(index + 1).padStart(2, "0")}`,
-      tone,
-      x,
-      y,
-      z,
-    };
-  });
+      return {
+        id: agent.id,
+        label: agent.name,
+        callsign: `AGT_${String(index + 1).padStart(2, "0")}`,
+        tone,
+        x,
+        y,
+        z,
+      };
+    });
 
-  const nodesByName = new Map(nodes.map((node) => [node.label, node]));
+  const nodesByName = new Map<string, SectorNode[]>();
+  for (const node of baseNodes) {
+    const matches = nodesByName.get(node.label);
+    if (matches) {
+      matches.push(node);
+    } else {
+      nodesByName.set(node.label, [node]);
+    }
+  }
+
+  const criticalNodeIds = new Set<string>();
+  for (const trace of data.traces) {
+    if (!criticalRiskTraceIds.has(trace.traceId)) {
+      continue;
+    }
+
+    const matches = nodesByName.get(trace.agentName);
+    if (matches?.length === 1) {
+      criticalNodeIds.add(matches[0].id);
+    }
+  }
+
+  const nodes: SectorNode[] = baseNodes.map((node) => ({
+    ...node,
+    tone: criticalNodeIds.has(node.id) ? "critical" : node.tone,
+  }));
   const hub = nodes[0];
   const routes = data.traces.flatMap<SectorRoute>((trace) => {
-    const target = nodesByName.get(trace.agentName);
-    if (!hub || !target) {
+    const matches = nodesByName.get(trace.agentName);
+    if (!hub || matches?.length !== 1) {
       return [];
     }
 
+    const target = matches[0];
+
     const tone: SectorTone = criticalRiskTraceIds.has(trace.traceId)
       ? "critical"
-      : trace.status === "failed"
+      : trace.status === "failed" || trace.status === "timeout"
         ? "degraded"
         : "healthy";
 
