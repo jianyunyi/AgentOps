@@ -172,6 +172,22 @@ describe("buildControlTowerModel", () => {
     ]);
   });
 
+  it("does not attribute critical traces when the 13th agent duplicates a visible name", () => {
+    const agents = Array.from({ length: 13 }, (_, index) =>
+      agent(`a${index + 1}`, index === 12 ? "agent-2" : `agent-${index + 1}`),
+    );
+    const model = buildControlTowerModel({
+      agents,
+      traces: [trace("trc_hidden_duplicate", "agent-2")],
+      risks: [criticalRisk("trc_hidden_duplicate")],
+    });
+
+    expect(model.nodes).toHaveLength(12);
+    expect(model.nodes.some((node) => node.id === "a13")).toBe(false);
+    expect.soft(model.routes).toEqual([]);
+    expect.soft(model.nodes.find((node) => node.id === "a2")?.tone).toBe("healthy");
+  });
+
   it("rejects traces whose target is not a displayed agent", () => {
     const model = buildControlTowerModel({
       agents: [agent("hub", "orchestrator")],

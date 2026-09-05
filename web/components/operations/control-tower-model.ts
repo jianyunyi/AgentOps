@@ -53,6 +53,11 @@ export function buildControlTowerModel(
       .map((risk) => risk.trace_id),
   );
 
+  const agentNameCounts = new Map<string, number>();
+  for (const agent of data.agents) {
+    agentNameCounts.set(agent.name, (agentNameCounts.get(agent.name) ?? 0) + 1);
+  }
+
   const baseNodes = data.agents
     .slice(0, positions.length)
     .map((agent, index) => {
@@ -73,6 +78,10 @@ export function buildControlTowerModel(
 
   const nodesByName = new Map<string, SectorNode[]>();
   for (const node of baseNodes) {
+    if (agentNameCounts.get(node.label) !== 1) {
+      continue;
+    }
+
     const matches = nodesByName.get(node.label);
     if (matches) {
       matches.push(node);
