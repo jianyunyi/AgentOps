@@ -43,6 +43,15 @@ describe("ConsoleShell", () => {
     expect(screen.getByText("content")).toBeInTheDocument();
   });
 
+  it("marks the matching nested route as current", () => {
+    pathname.mockReturnValue("/dashboard/traces/run-123");
+
+    render(<ConsoleShell>content</ConsoleShell>);
+
+    expect(screen.getByRole("link", { name: "Traces" })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("link", { name: "Overview" })).not.toHaveAttribute("aria-current");
+  });
+
   it("logs out through the API helper and routes to login", async () => {
     mockedRequest.mockResolvedValue(undefined);
 

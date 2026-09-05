@@ -65,7 +65,7 @@ const expectedPositions = [
 ] as const;
 
 describe("buildControlTowerModel", () => {
-  it("derives fleet health and critical risk from live records", () => {
+  it("derives registry status and critical risk from live records", () => {
     const model = buildControlTowerModel({
       agents: [
         agent("a1", "orchestrator"),
@@ -75,7 +75,7 @@ describe("buildControlTowerModel", () => {
       risks: [criticalRisk("trc_8421")],
     });
 
-    expect(model.health).toEqual({ healthy: 1, total: 2 });
+    expect(model.registry).toEqual({ active: 1, total: 2 });
     expect(model.activeRisk).toEqual({ critical: 1, total: 1 });
     expect(model.nodes.map((node) => node.id)).toEqual(["a1", "a2"]);
     expect(model.routes[0]).toMatchObject({
@@ -89,7 +89,7 @@ describe("buildControlTowerModel", () => {
 
     expect(model.nodes).toEqual([]);
     expect(model.routes).toEqual([]);
-    expect(model.health).toEqual({ healthy: 0, total: 0 });
+    expect(model.registry).toEqual({ active: 0, total: 0 });
   });
 
   it("ignores closed critical risks", () => {

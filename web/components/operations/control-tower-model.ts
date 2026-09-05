@@ -20,7 +20,7 @@ export interface SectorRoute {
 }
 
 export interface ControlTowerModel {
-  health: { healthy: number; total: number };
+  registry: { active: number; total: number };
   activeRisk: { critical: number; total: number };
   nodes: SectorNode[];
   routes: SectorRoute[];
@@ -125,8 +125,8 @@ export function buildControlTowerModel(
   });
 
   return {
-    health: {
-      healthy: nodes.filter((node) => node.tone === "healthy").length,
+    registry: {
+      active: baseNodes.filter((node) => node.tone === "healthy").length,
       total: nodes.length,
     },
     activeRisk: {
