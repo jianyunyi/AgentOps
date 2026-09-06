@@ -224,6 +224,18 @@ button:disabled { cursor: not-allowed; opacity: 0.55; }
 .tower-evidence dt { color: var(--muted); }
 .tower-evidence dd { margin: 0; color: var(--muted-strong); overflow-wrap: anywhere; }
 .tower-empty { padding: 28px 0; color: var(--muted); font-size: 13px; }
+.tower-policy-state { min-width: 0; min-height: 244px; padding: 20px; border: 1px solid var(--line); border-radius: 14px; background: linear-gradient(145deg, rgba(12, 34, 41, 0.72), rgba(5, 19, 25, 0.8)); box-shadow: 0 22px 70px rgba(0, 0, 0, 0.13); }
+.tower-policy-state .tower-panel-heading { margin-top: 5px; }
+.tower-policy-state .tower-panel-heading a { flex: 0 0 auto; color: var(--cyan); font-size: 12px; }
+.tower-policy-state > [role="status"], .tower-policy-state > p:not(.eyebrow) { margin: 22px 0 0; color: var(--muted); font-size: 13px; line-height: 1.5; }
+.tower-policy-state dl { display: grid; gap: 0; margin: 18px 0 0; }
+.tower-policy-state dl > div { display: grid; grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr); gap: 12px; min-width: 0; padding: 11px 0; border-top: 1px solid var(--line); }
+.tower-policy-state dt, .tower-policy-state dd, .policy-posture-value { min-width: 0; overflow-wrap: anywhere; }
+.tower-policy-state dt { color: var(--muted); font-size: 12px; }
+.tower-policy-state dd { margin: 0; color: var(--muted-strong); font-size: 12px; line-height: 1.45; }
+.tower-policy-error { display: grid; gap: 12px; min-width: 0; margin-top: 18px; padding: 14px; border: 1px solid rgba(255, 141, 133, 0.4); border-radius: var(--radius-sm); background: rgba(96, 31, 33, 0.22); }
+.tower-policy-error p { min-width: 0; margin: 0; color: #ffd5d0; overflow-wrap: anywhere; font-size: 13px; line-height: 1.5; }
+.tower-policy-error button { justify-self: start; min-width: 0; padding: 0 12px; border: 1px solid var(--line-strong); background: rgba(103, 244, 210, 0.06); color: var(--text); }
 
 @media (max-width: 1280px) { .tower-grid { grid-template-columns: 1fr; } .tower-risk-queue { min-height: auto; } .tower-risk-queue ul { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; } .tower-risk-queue li { border-top: 0; border-left: 1px solid var(--line); padding: 0 0 0 14px; } .tower-risk-queue li:first-child { border-left: 0; padding-left: 0; } }
 @media (max-width: 900px) { .app-shell { grid-template-columns: 1fr; padding-bottom: 68px; } .command-rail { position: fixed; inset: auto 0 0; z-index: 20; display: flex; flex-direction: row; width: 100%; height: 66px; padding: 6px 8px; border-top: 1px solid var(--line); border-right: 0; background: rgba(4, 14, 19, 0.94); } .command-brand, .command-operator { display: none; } .command-nav { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); width: 100%; gap: 2px; margin: 0; } .command-nav a { justify-content: center; min-height: 52px; padding: 0 4px; border-radius: 8px; font-size: 0; } .command-nav a svg { width: 19px; height: 19px; } .command-nav a:hover { transform: none; } .console-workspace.page-frame { grid-column: 1; width: min(100% - 36px, 1580px); padding-top: 24px; } .shell-alert { grid-column: 1; width: min(100% - 36px, 1380px); } .tower-bottom { grid-template-columns: 1fr; } }
