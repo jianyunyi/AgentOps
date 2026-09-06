@@ -5,8 +5,8 @@ import "./globals.css";
 import { ConsoleShell } from "../components/layout/console-shell";
 
 export const metadata: Metadata = {
-  title: "AgentScope | AI operations control",
-  description: "Observe, govern, and audit every AI Agent execution.",
+  title: "AgentOps | Autonomous traffic control",
+  description: "Observe, govern, and investigate live AI Agent operations.",
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {

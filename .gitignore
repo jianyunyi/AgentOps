@@ -5,6 +5,7 @@
 .tmp-*
 .superpowers/
 .worktrees/
+.impeccable/
 
 # Go
 *.exe
@@ -19,6 +20,8 @@ web/out/
 web/coverage/
 sdk/typescript/dist/
 npm-debug.log*
+web/.npm-cache/
+web/tsconfig.tsbuildinfo
 
 # IDE and OS files
 .idea/
