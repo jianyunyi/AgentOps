@@ -90,8 +90,8 @@ describe("ControlTower", () => {
     listPolicies.mockResolvedValue([policy]);
     render(<ControlTower />);
 
-    expect(await screen.findByRole("heading", { name: "Policy posture" })).toBeInTheDocument();
-    expect(screen.getByText("Production guardrails · v3")).toBeInTheDocument();
+    expect(await screen.findByText("Production guardrails · v3")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Policy posture" })).toBeInTheDocument();
     expect(listPolicies).toHaveBeenCalledTimes(1);
   });
 
