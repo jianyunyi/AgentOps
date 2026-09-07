@@ -67,4 +67,15 @@ describe("risksForTrace", () => {
       ).map(({ id }) => id),
     ).toEqual(["alpha", "zeta"]);
   });
+
+  it("leaves the caller input order unchanged", () => {
+    const risks = [
+      risk("old", "trace-1", "2026-09-07T08:00:00Z"),
+      risk("new", "trace-1", "2026-09-07T10:00:00Z"),
+    ];
+
+    risksForTrace(risks, "trace-1");
+
+    expect(risks.map(({ id }) => id)).toEqual(["old", "new"]);
+  });
 });
