@@ -95,8 +95,10 @@ describe("TraceRiskEvidence", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "Resolve risk-1" }));
 
-    expect(await screen.findByRole("alert")).toHaveTextContent("Unable to update risk event");
+    expect(await screen.findByRole("alert")).toHaveTextContent(/^Unable to update risk event$/);
     expect(screen.getByText("[REDACTED: external instruction]")).toBeInTheDocument();
-    expect(within(screen.getByRole("complementary")).getByText("risk-1")).toBeInTheDocument();
+    const riskEvent = within(screen.getByRole("complementary")).getByText("risk-1").closest("article");
+    expect(riskEvent).not.toBeNull();
+    expect(within(riskEvent as HTMLElement).getByText("open")).toBeInTheDocument();
   });
 });
