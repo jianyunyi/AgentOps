@@ -66,7 +66,7 @@ export const TraceRiskEvidence = ({ state, canReview, onReview }: TraceRiskEvide
                   <div><dt>Rule</dt><dd>{risk.rule_code}</dd></div>
                   <div><dt>Detector</dt><dd>{risk.detector}</dd></div>
                   <div><dt>Reason</dt><dd>{risk.reason}</dd></div>
-                  <div><dt>Redacted evidence</dt><dd>{risk.evidence_redacted}</dd></div>
+                  <div><dt>Redacted evidence</dt><dd className="trace-risk-evidence__redacted">{risk.evidence_redacted}</dd></div>
                   <div><dt>Created</dt><dd>{formattedCreatedAt(risk.created_at)}</dd></div>
                 </dl>
                 {canReview ? (

@@ -58,6 +58,12 @@ describe("TraceRiskEvidence", () => {
     expect(screen.getByText("2026-09-07T10:00:00.000Z")).toBeInTheDocument();
   });
 
+  it("marks long redacted evidence for safe wrapping", () => {
+    render(<TraceRiskEvidence state={ready([{ ...risk(), evidence_redacted: "evidence-with-a-very-long-unbroken-value" }])} canReview={false} onReview={vi.fn()} />);
+
+    expect(screen.getByText("evidence-with-a-very-long-unbroken-value")).toHaveClass("trace-risk-evidence__redacted");
+  });
+
   it("does not expose review controls without permission", () => {
     render(<TraceRiskEvidence state={ready()} canReview={false} onReview={vi.fn()} />);
 
