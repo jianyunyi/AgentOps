@@ -31,6 +31,18 @@ describe("risksForTrace", () => {
     ).toEqual(["exact"]);
   });
 
+  it("returns no risks when no event exactly matches the requested trace id", () => {
+    expect(
+      risksForTrace(
+        [
+          risk("close", "trace-10", "2026-09-07T10:00:00Z"),
+          risk("other", "trace-2", "2026-09-07T10:01:00Z"),
+        ],
+        "trace-1",
+      ),
+    ).toEqual([]);
+  });
+
   it("sorts valid timestamps newest first", () => {
     expect(
       risksForTrace(
