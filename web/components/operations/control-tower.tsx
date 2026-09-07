@@ -4,9 +4,12 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { getCurrentUser } from "../../lib/api/auth";
 import { getOverviewData, type OverviewData } from "../../lib/api/overview";
+import { listPolicies } from "../../lib/api/policies";
 import { hasPermission } from "../../lib/permissions";
 import { StateView } from "../ui/state-view";
 import { buildControlTowerModel } from "./control-tower-model";
+import { buildPolicyPosture } from "./policy-posture-model";
+import { PolicyPosture, type PolicyPostureState } from "./policy-posture";
 import { SectorTopology } from "./sector-topology";
 
 type LoadState =
@@ -25,12 +28,16 @@ function formatDuration(durationMs: number) {
 
 export function ControlTower() {
   const [requestVersion, setRequestVersion] = useState(0);
+  const [policyRequestVersion, setPolicyRequestVersion] = useState(0);
   const [loadState, setLoadState] = useState<LoadState>({ kind: "loading" });
+  const [canReadPolicies, setCanReadPolicies] = useState(false);
+  const [policyState, setPolicyState] = useState<PolicyPostureState>({ kind: "loading" });
   const [selectedId, setSelectedId] = useState<string>();
 
   useEffect(() => {
     let active = true;
     setLoadState({ kind: "loading" });
+    setCanReadPolicies(false);
     setSelectedId(undefined);
 
     async function load() {
@@ -43,6 +50,7 @@ export function ControlTower() {
           return;
         }
 
+        setCanReadPolicies(hasPermission(user, "policy:read"));
         const data = await getOverviewData();
         if (active) setLoadState({ kind: "ready", data });
       } catch {
@@ -53,6 +61,23 @@ export function ControlTower() {
     void load();
     return () => { active = false; };
   }, [requestVersion]);
+
+  useEffect(() => {
+    if (!canReadPolicies) return;
+
+    let active = true;
+    setPolicyState({ kind: "loading" });
+
+    void listPolicies()
+      .then((policies) => {
+        if (active) setPolicyState({ kind: "ready", posture: buildPolicyPosture(policies) });
+      })
+      .catch(() => {
+        if (active) setPolicyState({ kind: "error", onRetry: () => setPolicyRequestVersion((version) => version + 1) });
+      });
+
+    return () => { active = false; };
+  }, [canReadPolicies, policyRequestVersion]);
 
   const model = useMemo(
     () => loadState.kind === "ready" ? buildControlTowerModel(loadState.data) : undefined,
@@ -132,6 +157,7 @@ export function ControlTower() {
           {selectedAgent ? <dl><dt>Agent</dt><dd>{selectedAgent.label}</dd><dt>Callsign</dt><dd>{selectedAgent.callsign}</dd><dt>State</dt><dd>{selectedAgent.tone}</dd></dl> : <p className="tower-empty">No Agent node is available in loaded results.</p>}
           <p>Routes visualize loaded Trace activity and do not assert Agent-to-Agent calls.</p>
         </section>
+        {canReadPolicies ? <PolicyPosture state={policyState} /> : null}
       </div>
     </section>
   );
