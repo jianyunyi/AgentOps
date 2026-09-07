@@ -68,6 +68,18 @@ describe("risksForTrace", () => {
     ).toEqual(["valid", "malformed"]);
   });
 
+  it("uses lexical id order when matching risks both have malformed timestamps", () => {
+    expect(
+      risksForTrace(
+        [
+          risk("zeta", "trace-1", "not-a-timestamp"),
+          risk("alpha", "trace-1", "also-not-a-timestamp"),
+        ],
+        "trace-1",
+      ).map(({ id }) => id),
+    ).toEqual(["alpha", "zeta"]);
+  });
+
   it("uses lexical id order for equal timestamps", () => {
     expect(
       risksForTrace(
