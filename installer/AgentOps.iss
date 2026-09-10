@@ -7,6 +7,7 @@ ArchitecturesAllowed=x64
 ArchitecturesInstallIn64BitMode=x64
 PrivilegesRequired=admin
 OutputBaseFilename=AgentOps-Setup-x64
+OutputDir=..\dist
 
 [Files]
 Source: "..\dist\agentopsctl.exe"; DestDir: "{app}"; Flags: ignoreversion
