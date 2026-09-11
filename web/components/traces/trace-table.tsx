@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { TraceSummary } from "../../lib/api/types";
+import { StatusBadge } from "../ui/status-badge";
 
 function formatNumber(value: number): string {
   return new Intl.NumberFormat("en-US").format(value);
@@ -32,8 +33,8 @@ export function TraceTable({ traces }: { traces: TraceSummary[] }) {
         {traces.map((trace) => (
           <tr key={trace.traceId}>
             <td><Link href={`/dashboard/traces/${trace.traceId}`}>{trace.agentName}</Link></td>
-            <td>{trace.status}</td>
-            <td>{trace.riskLevel}</td>
+            <td><StatusBadge domain="trace" status={trace.status} /></td>
+            <td><StatusBadge domain="risk" status={trace.riskLevel} /></td>
             <td>{trace.durationMs} ms</td>
             <td>{formatNumber(trace.totalTokens)}</td>
             <td>${trace.estimatedCost.toFixed(4)}</td>

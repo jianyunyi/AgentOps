@@ -3,6 +3,9 @@
 .env.*
 !.env.example
 .tmp-*
+.superpowers/
+.worktrees/
+.impeccable/
 
 # Go
 *.exe
@@ -10,11 +13,15 @@
 *.out
 
 # Node / Next.js
+node_modules/
 web/node_modules/
 web/.next/
 web/out/
 web/coverage/
+sdk/typescript/dist/
 npm-debug.log*
+web/.npm-cache/
+web/tsconfig.tsbuildinfo
 
 # IDE and OS files
 .idea/

@@ -62,6 +62,34 @@ jobs:
       - run: npm exec -- vitest run
       - run: npm run build
 
+  typescript-sdk:
+    runs-on: ubuntu-latest
+    env:
+      SDK_INTEGRATION_ENABLED: ${{ secrets.AGENTOPS_SDK_BASE_URL != '' && secrets.AGENT_API_KEY != '' && secrets.AGENT_SIGNING_SECRET != '' }}
+    defaults:
+      run:
+        working-directory: sdk/typescript
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: sdk/typescript/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test -- --run
+      - run: npm run build
+      - run: npm audit --audit-level=high
+      - name: Optional real API integration
+        if: env.SDK_INTEGRATION_ENABLED == 'true'
+        env:
+          AGENTSCOPE_INTEGRATION: "1"
+          AGENTOPS_SDK_BASE_URL: ${{ secrets.AGENTOPS_SDK_BASE_URL }}
+          AGENT_API_KEY: ${{ secrets.AGENT_API_KEY }}
+          AGENT_SIGNING_SECRET: ${{ secrets.AGENT_SIGNING_SECRET }}
+        run: npm run test:integration
+
   security:
     runs-on: ubuntu-latest
     steps:
