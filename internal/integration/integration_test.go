@@ -93,7 +93,7 @@ func TestRedisStreamPendingRecovery(t *testing.T) {
 		t.Fatalf("initial group read = batches:%d err:%v", len(claimed), err)
 	}
 
-	messages, _, err := client.XAutoClaim(ctx, &redisv9.XAutoClaimArgs{Stream: stream, Group: group, Consumer: recoveryConsumer, MinIdle: time.Millisecond, Start: "0-0", Count: 10}).Result()
+	messages, _, err := client.XAutoClaim(ctx, &redisv9.XAutoClaimArgs{Stream: stream, Group: group, Consumer: recoveryConsumer, MinIdle: 0, Start: "0-0", Count: 10}).Result()
 	if err != nil {
 		t.Fatal(err)
 	}
