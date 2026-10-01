@@ -21,6 +21,26 @@ Name: "{group}\AgentOps Logs"; Filename: "{app}\scripts\agentops-logs.cmd"
 Name: "{group}\Diagnose AgentOps"; Filename: "{app}\scripts\agentops-diagnose.cmd"
 
 [Code]
+var ImagePage: TInputQueryWizardPage;
+
+procedure InitializeWizard();
+begin
+  ImagePage := CreateInputQueryPage(wpSelectDir, 'Runtime images', 'Immutable container images',
+    'For a new installation, enter accessible API and Web image references ending in @sha256:<64 hex digits>. Existing configuration is preserved.');
+  ImagePage.Add('API image:', False);
+  ImagePage.Add('Web image:', False);
+end;
+
+function NextButtonClick(CurPageID: Integer): Boolean;
+begin
+  Result := True;
+  if (CurPageID = ImagePage.ID) and not FileExists(ExpandConstant('{commonappdata}\AgentOps\config\agentops.env')) then begin
+    Result := (Pos('@sha256:', ImagePage.Values[0]) > 0) and (Pos('@sha256:', ImagePage.Values[1]) > 0)
+      and (Pos('"', ImagePage.Values[0]) = 0) and (Pos('"', ImagePage.Values[1]) = 0);
+    if not Result then MsgBox('Both immutable image references are required.', mbError, MB_OK);
+  end;
+end;
+
 function ExecChecked(const FileName, Params: String): Boolean;
 var ResultCode: Integer;
 begin
@@ -45,7 +65,9 @@ var ResultCode: Integer;
 begin
   if CurStep = ssPostInstall then begin
     ForceDirectories(ExpandConstant('{commonappdata}\AgentOps\config'));
-    Exec(ExpandConstant('{app}\agentopsctl.exe'), 'configure', '', SW_SHOWNORMAL, ewWaitUntilTerminated, ResultCode);
+    if not Exec(ExpandConstant('{app}\agentopsctl.exe'), 'configure "' + ImagePage.Values[0] + '" "' + ImagePage.Values[1] + '"', ExpandConstant('{app}'), SW_SHOWNORMAL, ewWaitUntilTerminated, ResultCode) then
+      RaiseException('AgentOps configuration could not be started.');
+    if ResultCode <> 0 then RaiseException('AgentOps configuration failed. Installation is not ready; rerun Setup with valid image digests.');
   end;
 end;
 
