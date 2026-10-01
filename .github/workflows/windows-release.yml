@@ -27,8 +27,29 @@ jobs:
           npm run build
       - run: pwsh -File scripts/validate-windows-package.test.ps1
 
+  recovery:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version-file: go.mod }
+      - run: go test -race ./internal/selfhost ./cmd/agentopsctl
+        env:
+          AGENTOPS_RECOVERY_INTEGRATION: "1"
+
+  windows-control-tests:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version-file: go.mod }
+      - run: go test ./internal/selfhost ./cmd/agentopsctl
+      - run: go build -o dist/agentopsctl.exe ./cmd/agentopsctl
+      - run: choco install innosetup --no-progress -y
+      - run: iscc installer/AgentOps.iss
+
   package:
-    needs: verify
+    needs: [verify, recovery, windows-control-tests]
     runs-on: windows-latest
     if: github.event_name != 'pull_request'
     steps:
