@@ -1,6 +1,10 @@
 package main
 
-import (\n\t"os"\n\t"path/filepath"\n\t"testing"\n)
+import (
+	"os"
+	"path/filepath"
+	"testing"
+)
 
 func TestCommandArgsRejectUnknownAction(t *testing.T) {
 	if _, err := commandArgs([]string{"destroy"}, "config.env"); err == nil {
