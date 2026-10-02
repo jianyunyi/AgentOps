@@ -125,6 +125,12 @@ func main() {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
+	if os.Args[1] == "start" {
+		if err := ensureStartAllowed(envFile); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+	}
 	if err := checkDocker(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
