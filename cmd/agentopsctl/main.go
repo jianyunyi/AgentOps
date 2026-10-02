@@ -59,7 +59,7 @@ func waitReady(url string) error {
 	return fmt.Errorf("API readiness check timed out")
 }
 
-func main() {
+func recoveryIncompleteMarker(env string) string {\n\treturn filepath.Join(filepath.Dir(env), ".restore-incomplete")\n}\n\nfunc ensureStartAllowed(env string) error {\n\tif _, err := os.Stat(recoveryIncompleteMarker(env)); err == nil {\n\t\treturn fmt.Errorf("restore is incomplete; discard the partial destination and retry restore against fresh MySQL/Redis volumes before start")\n\t} else if !os.IsNotExist(err) {\n\t\treturn fmt.Errorf("cannot verify restore state: %w", err)\n\t}\n\treturn nil\n}\n\nfunc main() {
 	envFile := os.Getenv("AGENTOPS_ENV_FILE")
 	if envFile == "" {
 		envFile = filepath.Join(os.Getenv("ProgramData"), "AgentOps", "config", "agentops.env")
