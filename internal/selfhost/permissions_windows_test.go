@@ -3,27 +3,37 @@
 package selfhost
 
 import (
-    "os"
-    "path/filepath"
-    "strings"
-    "testing"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
 
-    "golang.org/x/sys/windows"
+	"golang.org/x/sys/windows"
 )
 
 func TestRestrictWindowsDACL(t *testing.T) {
-    dir := filepath.Join(t.TempDir(), "protected")
-    if err := os.Mkdir(dir, 0700); err != nil { t.Fatal(err) }
-    if err := Restrict(dir); err != nil { t.Fatal(err) }
+	dir := filepath.Join(t.TempDir(), "protected")
+	if err := os.Mkdir(dir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := Restrict(dir); err != nil {
+		t.Fatal(err)
+	}
 
-    sd, err := windows.GetNamedSecurityInfo(dir, windows.SE_FILE_OBJECT, windows.DACL_SECURITY_INFORMATION|windows.PROTECTED_DACL_SECURITY_INFORMATION)
-    if err != nil { t.Fatal(err) }
-    dacl, present, err := sd.DACL()
-    if err != nil || !present || dacl == nil { t.Fatalf("DACL missing: present=%v err=%v", present, err) }
-    if dacl.AceCount() != 2 { t.Fatalf("expected exactly SYSTEM and Administrators ACEs, got %d", dacl.AceCount()) }
+	sd, err := windows.GetNamedSecurityInfo(dir, windows.SE_FILE_OBJECT, windows.DACL_SECURITY_INFORMATION|windows.PROTECTED_DACL_SECURITY_INFORMATION)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dacl, present, err := sd.DACL()
+	if err != nil || !present || dacl == nil {
+		t.Fatalf("DACL missing: present=%v err=%v", present, err)
+	}
+	if dacl.AceCount != 2 {
+		t.Fatalf("expected exactly SYSTEM and Administrators ACEs, got %d", dacl.AceCount)
+	}
 
-    s := sd.String()
-    if !strings.Contains(s, "D:P") || !strings.Contains(s, ";;;SY)") || !strings.Contains(s, ";;;BA)") {
-        t.Fatalf("unexpected protected DACL: %s", s)
-    }
+	s := sd.String()
+	if !strings.Contains(s, "D:P") || !strings.Contains(s, ";;;SY)") || !strings.Contains(s, ";;;BA)") {
+		t.Fatalf("unexpected protected DACL: %s", s)
+	}
 }
