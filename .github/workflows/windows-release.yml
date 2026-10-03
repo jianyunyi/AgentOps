@@ -26,6 +26,7 @@ jobs:
           npm test -- --run
           npm run build
       - run: pwsh -File scripts/validate-windows-package.test.ps1
+      - run: pwsh -File scripts/verify-windows-acl-test.test.ps1
 
   recovery:
     runs-on: ubuntu-latest
@@ -43,7 +44,14 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with: { go-version-file: go.mod }
-      - run: go test ./internal/selfhost ./cmd/agentopsctl
+      - name: Run Windows control tests
+        shell: pwsh
+        run: |
+          go test -json -count=1 ./internal/selfhost ./cmd/agentopsctl | Tee-Object -FilePath windows-control-tests.json
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Verify Windows protected ACL test executed
+        shell: pwsh
+        run: ./scripts/verify-windows-acl-test.ps1 -ResultsPath windows-control-tests.json
       - run: go build -o dist/agentopsctl.exe ./cmd/agentopsctl
       - run: choco install innosetup --no-progress -y
       - run: iscc installer/AgentOps.iss

@@ -59,6 +59,19 @@ func waitReady(url string) error {
 	return fmt.Errorf("API readiness check timed out")
 }
 
+func recoveryIncompleteMarker(env string) string {
+	return filepath.Join(filepath.Dir(env), ".restore-incomplete")
+}
+
+func ensureStartAllowed(env string) error {
+	if _, err := os.Stat(recoveryIncompleteMarker(env)); err == nil {
+		return fmt.Errorf("restore is incomplete; discard the partial destination and retry restore against fresh MySQL/Redis volumes before start")
+	} else if !os.IsNotExist(err) {
+		return fmt.Errorf("cannot verify restore state: %w", err)
+	}
+	return nil
+}
+
 func main() {
 	envFile := os.Getenv("AGENTOPS_ENV_FILE")
 	if envFile == "" {
@@ -111,6 +124,12 @@ func main() {
 	if err = os.Chdir(root); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
+	}
+	if os.Args[1] == "start" {
+		if err := ensureStartAllowed(envFile); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
 	}
 	if err := checkDocker(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -247,8 +266,18 @@ func recovery(args []string, env string) error {
 	if strings.TrimSpace(redisState.String()) != "0" {
 		return fmt.Errorf("restore refused: destination Redis is not empty; use fresh volumes")
 	}
+	marker := recoveryIncompleteMarker(env)
+	if err = os.WriteFile(marker, []byte("restore in progress; do not start AgentOps\n"), 0600); err != nil {
+		return err
+	}
+	if err = selfhost.Restrict(marker); err != nil {
+		return err
+	}
 	if err = recoveryCompose(env, []string{"exec", "-T", "mysql", "sh", "-c", `MYSQL_PWD="$MYSQL_PASSWORD" exec mysql -u agentscope agentscope`}, bytes.NewReader(sql), os.Stdout); err != nil {
 		return fmt.Errorf("restore failed; discard the partial destination and retry against a fresh database: %w", err)
+	}
+	if err = os.Remove(marker); err != nil {
+		return fmt.Errorf("database restored but restore guard could not be cleared; start remains blocked: %w", err)
 	}
 	fmt.Println("Database restored with original keys. Redis ephemeral state resets on a fresh instance. Run start and verify login, Agent credentials and events.")
 	return nil
