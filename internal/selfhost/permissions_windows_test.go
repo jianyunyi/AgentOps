@@ -24,9 +24,10 @@ func TestRestrictWindowsDACL(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	dacl, present, err := sd.DACL()
-	if err != nil || !present || dacl == nil {
-		t.Fatalf("DACL missing: present=%v err=%v", present, err)
+	// DACL reports absence through err; its boolean return means defaulted.
+	dacl, _, err := sd.DACL()
+	if err != nil || dacl == nil {
+		t.Fatalf("DACL missing: err=%v", err)
 	}
 	if dacl.AceCount != 2 {
 		t.Fatalf("expected exactly SYSTEM and Administrators ACEs, got %d", dacl.AceCount)
