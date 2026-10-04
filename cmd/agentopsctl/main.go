@@ -72,6 +72,33 @@ func ensureStartAllowed(env string) error {
 	return nil
 }
 
+// Atomic directory creation coordinates independent CLI processes on Windows and Unix.
+// A crash leaves the lock in place: operators must inspect it before removal.
+func acquireRecoveryLock(env string) (func(), error) {
+	dir := filepath.Dir(env)
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		return nil, err
+	}
+	lock := filepath.Join(dir, ".recovery-lock")
+	if err := os.Mkdir(lock, 0700); err != nil {
+		return nil, fmt.Errorf("another start or recovery operation is active (or a stale .recovery-lock needs operator inspection): %w", err)
+	}
+	return func() { _ = os.Remove(lock) }, nil
+}
+
+func start(env string, run func() error) error {
+	release, err := acquireRecoveryLock(env)
+	if err != nil {
+		return err
+	}
+	defer release()
+	// Check only after acquiring the shared lock, and hold it through startup.
+	if err := ensureStartAllowed(env); err != nil {
+		return err
+	}
+	return run()
+}
+
 func main() {
 	envFile := os.Getenv("AGENTOPS_ENV_FILE")
 	if envFile == "" {
@@ -126,10 +153,22 @@ func main() {
 		os.Exit(1)
 	}
 	if os.Args[1] == "start" {
-		if err := ensureStartAllowed(envFile); err != nil {
+		if err := start(envFile, func() error {
+			if err := checkDocker(); err != nil {
+				return err
+			}
+			command := exec.Command("docker", args...)
+			command.Stdout, command.Stderr = os.Stdout, os.Stderr
+			if err := command.Run(); err != nil {
+				return err
+			}
+			return waitReady("http://127.0.0.1:8080/health/ready")
+		}); err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
+		fmt.Println("AgentOps is ready at http://127.0.0.1:3300")
+		return
 	}
 	if err := checkDocker(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -151,14 +190,6 @@ func main() {
 	if err := command.Run(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
-	}
-
-	if os.Args[1] == "start" {
-		if err := waitReady("http://127.0.0.1:8080/health/ready"); err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			os.Exit(1)
-		}
-		fmt.Println("AgentOps is ready at http://127.0.0.1:3300")
 	}
 }
 
@@ -199,15 +230,11 @@ func recovery(args []string, env string) error {
 	if len(password) < 16 {
 		return fmt.Errorf("set AGENTOPS_BACKUP_PASSWORD (at least 16 characters); keep it separately from the backup")
 	}
-	dir := filepath.Dir(env)
-	if err := os.MkdirAll(dir, 0700); err != nil {
+	release, err := acquireRecoveryLock(env)
+	if err != nil {
 		return err
 	}
-	lock := filepath.Join(dir, ".recovery-lock")
-	if err := os.Mkdir(lock, 0700); err != nil {
-		return fmt.Errorf("another recovery operation is active (or a stale .recovery-lock needs operator inspection): %w", err)
-	}
-	defer os.Remove(lock)
+	defer release()
 	if args[0] == "backup" {
 		if _, err := selfhost.LoadConfig(env); err != nil {
 			return err

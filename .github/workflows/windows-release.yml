@@ -52,6 +52,18 @@ jobs:
       - name: Verify Windows protected ACL test executed
         shell: pwsh
         run: ./scripts/verify-windows-acl-test.ps1 -ResultsPath windows-control-tests.json
+      - name: Verify startup and recovery exclusion tests executed
+        shell: pwsh
+        run: |
+          $events = @(Get-Content windows-control-tests.json | ForEach-Object { $_ | ConvertFrom-Json })
+          foreach ($test in @('TestStartRestoreMutualExclusion', 'TestRestoreCannotEnterWhileStartRuns', 'TestStartRejectsStaleRecoveryLock')) {
+            $testEvents = @($events | Where-Object { $_.Package -eq 'agentscope/cmd/agentopsctl' -and $_.Test -eq $test })
+            if (-not ($testEvents | Where-Object { $_.Action -eq 'run' }) -or
+                -not ($testEvents | Where-Object { $_.Action -eq 'pass' }) -or
+                ($testEvents | Where-Object { $_.Action -in @('skip', 'fail') })) {
+              throw "Startup/recovery exclusion test must execute and pass: $test"
+            }
+          }
       - run: go build -o dist/agentopsctl.exe ./cmd/agentopsctl
       - run: choco install innosetup --no-progress -y
       - run: iscc installer/AgentOps.iss
