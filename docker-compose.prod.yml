@@ -1,3 +1,5 @@
+# Put an HTTPS reverse proxy (Caddy/Nginx/Ingress) in front of web and route
+# /api to api; TLS is terminated there. API/Web bind loopback only by default.
 services:
   mysql:
     image: mysql:8.4
@@ -10,6 +12,8 @@ services:
     healthcheck: { test: ["CMD", "mysqladmin", "ping", "-h", "localhost"], interval: 5s, timeout: 5s, retries: 20 }
   redis:
     image: redis:7.4-alpine
+    # No host ports: the bundled Redis is reachable only on the private Compose
+    # network. For managed Redis, set REDIS_ADDR/REDIS_* for API and Worker.
     command: ["redis-server", "--appendonly", "yes"]
     volumes: [redis-data:/data]
     healthcheck: { test: ["CMD", "redis-cli", "ping"], interval: 5s, timeout: 3s, retries: 20 }
@@ -17,23 +21,40 @@ services:
     build: { context: ., dockerfile: Dockerfile }
     environment:
       MYSQL_DSN: "agentscope:${MYSQL_PASSWORD}@tcp(mysql:3306)/agentscope?charset=utf8mb4&parseTime=True&loc=UTC"
-      REDIS_ADDR: redis:6379
+      REDIS_ADDR: ${REDIS_ADDR:-redis:6379}
+      REDIS_USERNAME: ${REDIS_USERNAME:-}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      REDIS_TLS_ENABLED: ${REDIS_TLS_ENABLED:-false}
+      REDIS_TLS_SERVER_NAME: ${REDIS_TLS_SERVER_NAME:-}
       HTTP_ADDR: :8080
       SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET is required}
+      SESSION_LEGACY_SESSION_PURGE: ${SESSION_LEGACY_SESSION_PURGE:-true}
       AGENT_SIGNING_ENCRYPTION_KEY: ${AGENT_SIGNING_ENCRYPTION_KEY:?AGENT_SIGNING_ENCRYPTION_KEY is required}
       AGENT_SIGNATURE_REQUIRED: ${AGENT_SIGNATURE_REQUIRED:-true}
       WEB_ORIGIN: ${WEB_ORIGIN:-http://localhost:3000}
-    ports: ["8080:8080"]
+    ports: ["127.0.0.1:8080:8080"]
     depends_on:
       mysql: { condition: service_healthy }
       redis: { condition: service_healthy }
     healthcheck: { test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1:8080/health/ready"], interval: 10s, timeout: 5s, retries: 12 }
+  web:
+    build: { context: ./web, dockerfile: Dockerfile }
+    environment:
+      NEXT_PUBLIC_API_BASE_URL: "${NEXT_PUBLIC_API_BASE_URL:-}"
+    ports: ["127.0.0.1:${WEB_PORT:-3000}:3000"]
+    depends_on:
+      api: { condition: service_healthy }
+    healthcheck: { test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"], interval: 10s, timeout: 5s, retries: 12 }
   worker:
     build: { context: ., dockerfile: Dockerfile }
     entrypoint: ["/app/worker"]
     environment:
       MYSQL_DSN: "agentscope:${MYSQL_PASSWORD}@tcp(mysql:3306)/agentscope?charset=utf8mb4&parseTime=True&loc=UTC"
-      REDIS_ADDR: redis:6379
+      REDIS_ADDR: ${REDIS_ADDR:-redis:6379}
+      REDIS_USERNAME: ${REDIS_USERNAME:-}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      REDIS_TLS_ENABLED: ${REDIS_TLS_ENABLED:-false}
+      REDIS_TLS_SERVER_NAME: ${REDIS_TLS_SERVER_NAME:-}
       HTTP_ADDR: :8080
       SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET is required}
       AGENT_SIGNING_ENCRYPTION_KEY: ${AGENT_SIGNING_ENCRYPTION_KEY:?AGENT_SIGNING_ENCRYPTION_KEY is required}

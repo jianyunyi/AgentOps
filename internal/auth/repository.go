@@ -12,10 +12,11 @@ import (
 )
 
 var (
-	ErrUserNotFound       = errors.New("user not found")
-	ErrSessionNotFound    = errors.New("session not found")
-	ErrInvitationNotFound = errors.New("invitation not found")
-	ErrInvitationUsed     = errors.New("invitation is no longer usable")
+	ErrUserNotFound            = errors.New("user not found")
+	ErrSessionNotFound         = errors.New("session not found")
+	ErrInvitationNotFound      = errors.New("invitation not found")
+	ErrInvitationUsed          = errors.New("invitation is no longer usable")
+	ErrSessionStoreUnavailable = errors.New("session store is not configured")
 )
 
 type MemberFilter struct {
@@ -199,6 +200,9 @@ func (r *GORMRepository) FindInvitationByTokenHash(ctx context.Context, tokenHas
 }
 
 func (r *GORMRepository) AcceptInvitation(ctx context.Context, invitation *MemberInvitation, user *User, session *Session, record *audit.Record) error {
+	if r.sessionSecret == "" {
+		return ErrSessionStoreUnavailable
+	}
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var current MemberInvitation
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id = ?", invitation.ID).First(&current).Error; err != nil {
@@ -214,16 +218,27 @@ func (r *GORMRepository) AcceptInvitation(ctx context.Context, invitation *Membe
 		if err := tx.Model(&current).Updates(map[string]any{"status": InviteAccepted, "accepted_at": timeNow()}).Error; err != nil {
 			return err
 		}
-		if err := tx.Create(session).Error; err != nil {
+		storedSession := *session
+		storedSession.ID = SessionLookupKey(r.sessionSecret, session.ID)
+		if err := tx.Create(&storedSession).Error; err != nil {
 			return err
 		}
 		return tx.Create(record).Error
 	})
 }
 
-type GORMRepository struct{ db *gorm.DB }
+type GORMRepository struct {
+	db            *gorm.DB
+	sessionSecret string
+}
 
+// NewGORMRepository is retained for source compatibility but intentionally
+// cannot read or write sessions without an explicit secret.
 func NewGORMRepository(db *gorm.DB) *GORMRepository { return &GORMRepository{db: db} }
+
+func NewGORMRepositoryWithSessionSecret(db *gorm.DB, sessionSecret string) *GORMRepository {
+	return &GORMRepository{db: db, sessionSecret: sessionSecret}
+}
 
 func (r *GORMRepository) FindByEmail(ctx context.Context, email string) (*User, error) {
 	var user User
@@ -256,12 +271,20 @@ func (r *GORMRepository) CreateOIDCUser(ctx context.Context, user *User) error {
 }
 
 func (r *GORMRepository) CreateSession(ctx context.Context, session *Session) error {
-	return r.db.WithContext(ctx).Create(session).Error
+	if r.sessionSecret == "" {
+		return ErrSessionStoreUnavailable
+	}
+	stored := *session
+	stored.ID = SessionLookupKey(r.sessionSecret, session.ID)
+	return r.db.WithContext(ctx).Create(&stored).Error
 }
 
 func (r *GORMRepository) FindSession(ctx context.Context, sessionID string) (*Session, error) {
+	if r.sessionSecret == "" {
+		return nil, ErrSessionStoreUnavailable
+	}
 	var session Session
-	if err := r.db.WithContext(ctx).Where("id = ? AND expires_at > ?", sessionID, timeNow()).First(&session).Error; err != nil {
+	if err := r.db.WithContext(ctx).Where("id = ? AND expires_at > ?", SessionLookupKey(r.sessionSecret, sessionID), timeNow()).First(&session).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, ErrSessionNotFound
 		}
@@ -282,7 +305,10 @@ func (r *GORMRepository) FindUserByID(ctx context.Context, userID string) (*User
 }
 
 func (r *GORMRepository) RevokeSession(ctx context.Context, sessionID string) error {
-	return r.db.WithContext(ctx).Where("id = ?", sessionID).Delete(&Session{}).Error
+	if r.sessionSecret == "" {
+		return ErrSessionStoreUnavailable
+	}
+	return r.db.WithContext(ctx).Where("id = ?", SessionLookupKey(r.sessionSecret, sessionID)).Delete(&Session{}).Error
 }
 
 func (r *GORMRepository) RegisterTenantOwner(ctx context.Context, tenantName string, user *User) (string, error) {

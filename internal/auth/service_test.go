@@ -119,6 +119,19 @@ func TestLoginCreatesTenantScopedSession(t *testing.T) {
 	if repo.sessions[session.ID] == nil {
 		t.Fatal("Login() must persist the session")
 	}
+	if SessionLookupKey("test-session-secret", session.ID) == session.ID {
+		t.Fatal("session lookup key must not equal raw cookie value")
+	}
+}
+
+func TestSessionLookupKeyIsDomainSeparatedAndKeyed(t *testing.T) {
+	raw := "ses_test_cookie"
+	if SessionLookupKey("secret-a", raw) == SessionLookupKey("secret-b", raw) {
+		t.Fatal("different session secrets must produce different lookup keys")
+	}
+	if SessionLookupKey("secret-a", raw) == raw {
+		t.Fatal("lookup key must not contain the raw cookie value")
+	}
 }
 
 func TestLoginRejectsWrongPassword(t *testing.T) {

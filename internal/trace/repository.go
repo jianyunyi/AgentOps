@@ -13,6 +13,7 @@ import (
 )
 
 var ErrTraceNotFound = errors.New("trace not found")
+var ErrTraceAgentMismatch = errors.New("trace belongs to another agent")
 
 type Repository interface {
 	EventExists(ctx context.Context, tenantID, eventID string) (bool, error)
@@ -94,6 +95,9 @@ func (r *GORMRepository) IngestEventAtomic(ctx context.Context, identity IngestC
 			}
 		} else if traceErr != nil {
 			return traceErr
+		}
+		if trace.AgentID != identity.AgentID {
+			return ErrTraceAgentMismatch
 		}
 		span := Span{ID: spanID(), TenantID: identity.TenantID, TraceID: event.TraceID, SpanID: event.SpanID, ParentSpanID: event.ParentSpanID, SpanType: event.EventType, Name: event.EventType, Status: "success", Sequence: event.Sequence, InputSnapshot: event.Payload, StartedAt: event.OccurredAt, CreatedAt: now}
 		if err := tx.Create(&span).Error; err != nil {

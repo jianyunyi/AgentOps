@@ -1,6 +1,11 @@
 package auth
 
-import "time"
+import (
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
+	"time"
+)
 
 const (
 	UserActive   = "active"
@@ -45,6 +50,15 @@ type Session struct {
 	Role      string    `gorm:"size:32;not null"`
 	ExpiresAt time.Time `gorm:"index;not null"`
 	CreatedAt time.Time
+}
+
+// SessionLookupKey derives the only value allowed to identify a session in
+// storage. The raw cookie token is never persisted.
+func SessionLookupKey(secret, raw string) string {
+	mac := hmac.New(sha256.New, []byte(secret))
+	_, _ = mac.Write([]byte("agentscope/session/v1\x00"))
+	_, _ = mac.Write([]byte(raw))
+	return hex.EncodeToString(mac.Sum(nil))
 }
 
 const (

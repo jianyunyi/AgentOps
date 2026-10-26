@@ -37,7 +37,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	if err := database.Migrate(db); err != nil {
+	if err := database.MigrateWithOptions(db, database.MigrateOptions{PurgeLegacySessions: cfg.PurgeLegacySessions}); err != nil {
 		log.Fatal(err)
 	}
 	if cfg.AgentSignatureRequired {
@@ -49,7 +49,10 @@ func main() {
 		preflightCancel()
 	}
 
-	redisClient := platformredis.NewClient(cfg.RedisAddr)
+	redisClient, err := platformredis.NewClientWithConfig(platformredis.ClientConfig{Addr: cfg.RedisAddr, Username: cfg.RedisUsername, Password: cfg.RedisPassword, TLSEnabled: cfg.RedisTLSEnabled, TLSServerName: cfg.RedisTLSServerName})
+	if err != nil {
+		log.Fatal(err)
+	}
 	agentRepo := agent.NewGORMRepository(db)
 	auditService := audit.NewService(audit.NewGORMRepository(db))
 	var signingProtector agent.SigningSecretProtector
@@ -62,7 +65,7 @@ func main() {
 	policyService := policy.NewService(policy.NewGORMRepository(db))
 	riskService := risk.NewServiceWithPolicy(risk.NewGORMRepository(db), nil, policyService)
 	agentService := agent.NewServiceWithAuditAndNonceStoreAndSigning(agentRepo, auditService, agent.NewRedisNonceStore(redisClient), time.Duration(cfg.AgentReplayWindow)*time.Second, time.Duration(cfg.AgentNonceTTL)*time.Second, signingProtector, cfg.AgentSignatureRequired)
-	authRepo := auth.NewGORMRepository(db)
+	authRepo := auth.NewGORMRepositoryWithSessionSecret(db, cfg.SessionSecret)
 	authService := auth.NewServiceWithAudit(authRepo, cfg.SessionSecret, auditService)
 	var oidcService *auth.OIDCService
 	if cfg.OIDCIssuerURL != "" {
@@ -87,6 +90,9 @@ func main() {
 			}
 			return 120, time.Minute
 		}))
+	if err := router.SetTrustedProxies(cfg.TrustedProxyCIDRs); err != nil {
+		log.Fatalf("invalid trusted proxy configuration: %v", err)
+	}
 	authHandler := auth.NewHandlerWithOIDC(authService, oidcService)
 	router.GET("/api/v1/auth/oidc/login", authHandler.OIDCLogin)
 	router.GET("/api/v1/auth/oidc/callback", authHandler.OIDCCallback)

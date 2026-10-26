@@ -111,3 +111,32 @@ func TestCSRFMiddlewareAllowsMatchingToken(t *testing.T) {
 		t.Fatalf("status = %d, want 204", response.Code)
 	}
 }
+
+func TestClientIPIgnoresForwardedHeadersUnlessProxyIsTrusted(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	for _, test := range []struct {
+		name           string
+		trustedProxies []string
+		remoteAddr     string
+		want           string
+	}{
+		{name: "untrusted forwarder", remoteAddr: "203.0.113.10:4321", want: "203.0.113.10"},
+		{name: "trusted proxy", trustedProxies: []string{"10.20.0.0/16"}, remoteAddr: "10.20.1.8:4321", want: "198.51.100.24"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			router := gin.New()
+			if err := router.SetTrustedProxies(test.trustedProxies); err != nil {
+				t.Fatal(err)
+			}
+			router.GET("/", func(c *gin.Context) { c.String(http.StatusOK, c.ClientIP()) })
+			request := httptest.NewRequest(http.MethodGet, "/", nil)
+			request.RemoteAddr = test.remoteAddr
+			request.Header.Set("X-Forwarded-For", "198.51.100.24")
+			response := httptest.NewRecorder()
+			router.ServeHTTP(response, request)
+			if got := strings.TrimSpace(response.Body.String()); got != test.want {
+				t.Fatalf("client IP = %q, want %q", got, test.want)
+			}
+		})
+	}
+}

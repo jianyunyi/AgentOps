@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"errors"
+	"net"
 	"os"
 	"strconv"
 	"strings"
@@ -12,8 +13,14 @@ import (
 type Config struct {
 	MySQLDSN                  string
 	RedisAddr                 string
+	RedisUsername             string
+	RedisPassword             string
+	RedisTLSEnabled           bool
+	RedisTLSServerName        string
 	HTTPAddr                  string
 	SessionSecret             string
+	PurgeLegacySessions       bool
+	TrustedProxyCIDRs         []string
 	WebOrigin                 string
 	MaxBodyBytes              int64
 	AgentReplayWindow         int64
@@ -42,6 +49,9 @@ func Load() (Config, error) {
 	cfg := Config{
 		MySQLDSN:                  os.Getenv("MYSQL_DSN"),
 		RedisAddr:                 os.Getenv("REDIS_ADDR"),
+		RedisUsername:             strings.TrimSpace(os.Getenv("REDIS_USERNAME")),
+		RedisPassword:             os.Getenv("REDIS_PASSWORD"),
+		RedisTLSServerName:        strings.TrimSpace(os.Getenv("REDIS_TLS_SERVER_NAME")),
 		HTTPAddr:                  os.Getenv("HTTP_ADDR"),
 		SessionSecret:             os.Getenv("SESSION_SECRET"),
 		WebOrigin:                 os.Getenv("WEB_ORIGIN"),
@@ -62,12 +72,36 @@ func Load() (Config, error) {
 	if cfg.RedisAddr == "" {
 		return Config{}, errors.New("REDIS_ADDR is required")
 	}
+	if cfg.RedisUsername != "" && cfg.RedisPassword == "" {
+		return Config{}, errors.New("REDIS_PASSWORD is required when REDIS_USERNAME is set")
+	}
+	redisTLSEnabled, err := readBool("REDIS_TLS_ENABLED", false)
+	if err != nil {
+		return Config{}, err
+	}
+	cfg.RedisTLSEnabled = redisTLSEnabled
+	if cfg.RedisTLSEnabled {
+		if cfg.RedisTLSServerName == "" {
+			host, _, splitErr := net.SplitHostPort(cfg.RedisAddr)
+			if splitErr != nil || host == "" {
+				return Config{}, errors.New("REDIS_TLS_SERVER_NAME is required when it cannot be inferred from REDIS_ADDR")
+			}
+			cfg.RedisTLSServerName = host
+		}
+	} else if cfg.RedisTLSServerName != "" {
+		return Config{}, errors.New("REDIS_TLS_SERVER_NAME requires REDIS_TLS_ENABLED=true")
+	}
 	if cfg.HTTPAddr == "" {
 		return Config{}, errors.New("HTTP_ADDR is required")
 	}
 	if cfg.SessionSecret == "" {
 		return Config{}, errors.New("SESSION_SECRET is required")
 	}
+	purgeLegacySessions, parseErr := readBool("SESSION_LEGACY_SESSION_PURGE", false)
+	if parseErr != nil {
+		return Config{}, parseErr
+	}
+	cfg.PurgeLegacySessions = purgeLegacySessions
 	cfg.MaxBodyBytes = 2 * 1024 * 1024
 	if raw := os.Getenv("MAX_BODY_BYTES"); raw != "" {
 		value, err := strconv.ParseInt(raw, 10, 64)
@@ -135,6 +169,18 @@ func Load() (Config, error) {
 	}
 	if len(cfg.SessionSecret) < 32 {
 		return Config{}, errors.New("SESSION_SECRET must be at least 32 characters")
+	}
+	if raw := strings.TrimSpace(os.Getenv("TRUSTED_PROXY_CIDRS")); raw != "" {
+		for _, value := range strings.Split(raw, ",") {
+			cidr := strings.TrimSpace(value)
+			if cidr == "" {
+				return Config{}, errors.New("TRUSTED_PROXY_CIDRS contains an empty entry")
+			}
+			if _, _, err := net.ParseCIDR(cidr); err != nil {
+				return Config{}, errors.New("TRUSTED_PROXY_CIDRS contains an invalid CIDR")
+			}
+			cfg.TrustedProxyCIDRs = append(cfg.TrustedProxyCIDRs, cidr)
+		}
 	}
 	if cfg.LLMBaseURL != "" && cfg.LLMModel == "" {
 		return Config{}, errors.New("LLM_MODEL is required when LLM_BASE_URL is configured")

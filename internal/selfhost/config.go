@@ -14,7 +14,7 @@ import (
 
 type Config struct{ Values map[string]string }
 
-var allowed = map[string]bool{"AGENTOPS_WEB_IMAGE": true, "AGENTOPS_API_IMAGE": true, "WEB_PORT": true, "API_PORT": true, "MYSQL_PASSWORD": true, "SESSION_SECRET": true, "AGENT_SIGNING_ENCRYPTION_KEY": true, "ENABLE_LOCAL_LLM": true, "LLM_MODEL": true}
+var allowed = map[string]bool{"AGENTOPS_WEB_IMAGE": true, "AGENTOPS_API_IMAGE": true, "WEB_PORT": true, "API_PORT": true, "MYSQL_PASSWORD": true, "REDIS_ADDR": true, "REDIS_USERNAME": true, "REDIS_PASSWORD": true, "REDIS_TLS_ENABLED": true, "REDIS_TLS_SERVER_NAME": true, "SESSION_SECRET": true, "AGENT_SIGNING_ENCRYPTION_KEY": true, "ENABLE_LOCAL_LLM": true, "LLM_MODEL": true}
 
 func ParseConfig(r io.Reader, generate bool) (Config, error) {
 	values := map[string]string{}
@@ -46,6 +46,28 @@ func ParseConfig(r io.Reader, generate bool) (Config, error) {
 	}
 	if values["API_PORT"] == "" {
 		values["API_PORT"] = "8080"
+	}
+	if values["REDIS_ADDR"] == "" {
+		values["REDIS_ADDR"] = "redis:6379"
+	}
+	if values["REDIS_TLS_ENABLED"] == "" {
+		values["REDIS_TLS_ENABLED"] = "false"
+	}
+	if values["REDIS_TLS_ENABLED"] != "true" && values["REDIS_TLS_ENABLED"] != "false" {
+		return Config{}, fmt.Errorf("REDIS_TLS_ENABLED must be true or false")
+	}
+	if values["REDIS_USERNAME"] != "" && values["REDIS_PASSWORD"] == "" {
+		return Config{}, fmt.Errorf("REDIS_PASSWORD is required when REDIS_USERNAME is set")
+	}
+	if values["REDIS_TLS_ENABLED"] == "true" && values["REDIS_TLS_SERVER_NAME"] == "" {
+		host, _, err := net.SplitHostPort(values["REDIS_ADDR"])
+		if err != nil || host == "" {
+			return Config{}, fmt.Errorf("REDIS_TLS_SERVER_NAME is required when it cannot be inferred from REDIS_ADDR")
+		}
+		values["REDIS_TLS_SERVER_NAME"] = host
+	}
+	if values["REDIS_TLS_ENABLED"] == "false" && values["REDIS_TLS_SERVER_NAME"] != "" {
+		return Config{}, fmt.Errorf("REDIS_TLS_SERVER_NAME requires REDIS_TLS_ENABLED=true")
 	}
 	if values["WEB_PORT"] == values["API_PORT"] {
 		return Config{}, fmt.Errorf("ports must differ")

@@ -87,6 +87,9 @@ func (s *Service) Ingest(ctx context.Context, identity IngestContext, event Even
 	} else if err != nil {
 		return IngestResult{}, err
 	}
+	if trace.AgentID != identity.AgentID {
+		return IngestResult{}, ErrTraceAgentMismatch
+	}
 
 	span := &Span{
 		ID:            mustID("spn_"),

@@ -52,3 +52,9 @@ Use a newer GitHub Release only after verifying its checksum. Stop AgentOps befo
 ## Diagnostics and support
 
 Run **Diagnose AgentOps** to confirm Docker Desktop and Compose availability. Share container status and redacted logs only; never share `agentops.env`, passwords, session secrets, signing keys, or DSNs.
+
+## Redis and network security
+
+The bundled Redis has no published host port and is reachable only inside the Compose network. For a managed/private Redis, configure `REDIS_ADDR`, `REDIS_USERNAME` (optional), `REDIS_PASSWORD`, and `REDIS_TLS_ENABLED=true` in the protected `%ProgramData%\AgentOps\agentops.env`; set `REDIS_TLS_SERVER_NAME` only when the certificate name differs from the Redis hostname. The client validates the certificate chain and hostname and requires TLS 1.2 or newer. Keep API/Web bound to loopback; when exposing the console beyond localhost, terminate HTTPS at a reverse proxy and route `/api` to the API rather than publishing the API or Redis directly.
+
+The API purges only legacy plaintext `ses_` session rows on startup; existing browser sessions from older releases must sign in again once. HMAC-protected session rows are preserved on later restarts.
