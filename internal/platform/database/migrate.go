@@ -45,7 +45,10 @@ func Migrate(db *gorm.DB) error {
 }
 
 func MigrateWithOptions(db *gorm.DB, options MigrateOptions) error {
-	return db.Connection(func(conn *gorm.DB) (migrationErr error) {
+	// Use fresh GORM statements for this pinned connection. Reusing the root
+	// Statement lets Table("schema_migrations") leak into later AutoMigrate calls.
+	return db.Session(&gorm.Session{NewDB: true}).Connection(func(conn *gorm.DB) (migrationErr error) {
+		conn = conn.Session(&gorm.Session{NewDB: true})
 		var acquired sql.NullInt64
 		if err := conn.Raw("SELECT GET_LOCK(?, ?)", migrationLockName, migrationLockWaitSeconds).Row().Scan(&acquired); err != nil {
 			return fmt.Errorf("acquire schema migration lock: %w", err)
