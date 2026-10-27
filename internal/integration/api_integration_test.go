@@ -102,12 +102,21 @@ func TestMemberAPIInvitationAndOwnerTransfer(t *testing.T) {
 	if err := db.Create(target).Error; err != nil {
 		t.Fatal(err)
 	}
+	sessionSecret := "integration-session-secret-0123456789abcdef"
+	authRepo := auth.NewGORMRepositoryWithSessionSecret(db, sessionSecret)
 	session := &auth.Session{ID: fmt.Sprintf("s%d", stamp), UserID: ownerID, TenantID: tenantID, Role: auth.RoleOwner, ExpiresAt: time.Now().Add(time.Hour)}
-	if err := db.Create(session).Error; err != nil {
+	if err := authRepo.CreateSession(ctx, session); err != nil {
 		t.Fatal(err)
 	}
+	var storedSession auth.Session
+	if err := db.Where("user_id = ?", ownerID).First(&storedSession).Error; err != nil {
+		t.Fatal(err)
+	}
+	if storedSession.ID == session.ID {
+		t.Fatal("database must not store the raw session cookie token")
+	}
 	auditService := audit.NewService(audit.NewGORMRepository(db))
-	authService := auth.NewServiceWithAudit(auth.NewGORMRepository(db), "integration-secret", auditService)
+	authService := auth.NewServiceWithAudit(authRepo, sessionSecret, auditService)
 	agentService := agent.NewService(agent.NewGORMRepository(db))
 	riskService := risk.NewService(risk.NewGORMRepository(db), nil)
 	traceRepo := trace.NewGORMRepository(db)

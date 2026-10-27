@@ -190,6 +190,8 @@ func (h *Handler) authenticateQuery(c *gin.Context) (agent.Identity, bool) {
 
 func writeIngestError(c *gin.Context, err error) {
 	switch {
+	case errors.Is(err, ErrTraceAgentMismatch):
+		writeError(c, http.StatusConflict, "TRACE_AGENT_MISMATCH", "trace belongs to another agent")
 	case errors.Is(err, ErrInvalidEventType), errors.Is(err, ErrEventTimeInvalid), errors.Is(err, ErrPayloadTooLarge):
 		writeError(c, http.StatusBadRequest, "INVALID_EVENT", err.Error())
 	default:

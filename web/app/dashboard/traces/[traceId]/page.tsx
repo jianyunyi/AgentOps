@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import { APIError, getTrace } from "../../../../lib/api/client";
 import { getCurrentUser } from "../../../../lib/api/auth";
@@ -19,6 +19,8 @@ export default function TraceDetailPage() {
   const [canReviewRisks, setCanReviewRisks] = useState(false);
   const [riskState, setRiskState] = useState<TraceRiskState>({ kind: "loading" });
   const [riskRequestVersion, setRiskRequestVersion] = useState(0);
+  const [chainOpen, setChainOpen] = useState(false);
+  const chainTriggerRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     getTrace(params.traceId)
@@ -54,6 +56,19 @@ export default function TraceDetailPage() {
     return () => { cancelled = true; };
   }, [params.traceId, riskRequestVersion]);
 
+  useEffect(() => {
+    if (!chainOpen) return;
+    const trigger = chainTriggerRef.current;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setChainOpen(false);
+    };
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("keydown", closeOnEscape);
+      trigger?.focus();
+    };
+  }, [chainOpen]);
+
   const reviewRisk = async (id: string, status: "acknowledged" | "resolved") => {
     try {
       await reviewRiskEvent(id, status);
@@ -79,6 +94,56 @@ export default function TraceDetailPage() {
         </div>
         {canReadRisks ? <TraceRiskEvidence state={riskState} canReview={canReviewRisks} onReview={reviewRisk} /> : null}
       </div>
+
+      <button
+        type="button"
+        ref={chainTriggerRef}
+        className="trace-chain-trigger"
+        aria-label="Open full execution trace"
+        aria-controls="trace-chain-panel"
+        aria-expanded={chainOpen}
+        title="Open full execution trace"
+        onClick={() => setChainOpen(true)}
+      >
+        <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="6" cy="5" r="2" />
+          <circle cx="18" cy="12" r="2" />
+          <circle cx="6" cy="19" r="2" />
+          <path d="M8 5h3a3 3 0 0 1 3 3v1a3 3 0 0 0 3 3M8 19h3a3 3 0 0 0 3-3v-1a3 3 0 0 1 3-3" />
+        </svg>
+      </button>
+
+      {chainOpen && (
+        <div
+          className="trace-chain-overlay"
+          onClick={(event) => {
+            if (event.target === event.currentTarget) setChainOpen(false);
+          }}
+        >
+          <aside
+            id="trace-chain-panel"
+            className="trace-chain-drawer"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="trace-chain-title"
+          >
+            <header className="trace-chain-drawer__header">
+              <div>
+                <p className="eyebrow">Trace {trace.traceId}</p>
+                <h2 id="trace-chain-title">Full execution chain</h2>
+                <p>Root-first tree of recorded event types and tool-call steps.</p>
+              </div>
+              <button type="button" className="button-quiet button-compact" autoFocus onClick={() => setChainOpen(false)}>
+                Close
+              </button>
+            </header>
+            <div className="trace-chain-drawer__body">
+              <p className="trace-chain-note">This is observed execution telemetry, not private model reasoning or proof of answer correctness. Function names are not included in the current span fields.</p>
+              <SpanTree spans={trace.spans} />
+            </div>
+          </aside>
+        </div>
+      )}
     </section>
   );
 }

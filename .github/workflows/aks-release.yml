@@ -12,6 +12,11 @@ on:
         required: true
         default: true
         type: boolean
+      legacy_session_cutover:
+        description: "Drain the old stable API before the first HMAC-session release; existing users must sign in again"
+        required: true
+        default: false
+        type: boolean
 
 permissions:
   id-token: write
@@ -42,12 +47,14 @@ jobs:
         run: |
           docker build -t "$REGISTRY/agentscope-api:$IMAGE_TAG" -t "$REGISTRY/agentscope-api:latest" .
           docker build -t "$REGISTRY/agentscope-worker:$IMAGE_TAG" -t "$REGISTRY/agentscope-worker:latest" .
+          docker build -t "$REGISTRY/agentscope-web:$IMAGE_TAG" -t "$REGISTRY/agentscope-web:latest" web
           docker push "$REGISTRY/agentscope-api:$IMAGE_TAG"
           docker push "$REGISTRY/agentscope-worker:$IMAGE_TAG"
+          docker push "$REGISTRY/agentscope-web:$IMAGE_TAG"
       - name: Get AKS credentials
         run: az aks get-credentials --resource-group "$RESOURCE_GROUP" --name "$AKS_CLUSTER" --overwrite-existing
       - name: Validate manifests
-        run: kubectl apply --dry-run=server -f deploy/k8s/namespace.yaml -f deploy/k8s/serviceaccount.yaml -f deploy/k8s/configmap.yaml -f deploy/k8s/api.yaml -f deploy/k8s/worker.yaml -f deploy/k8s/pdb.yaml
+        run: kubectl apply --dry-run=server -f deploy/k8s/namespace.yaml -f deploy/k8s/serviceaccount.yaml -f deploy/k8s/configmap.yaml -f deploy/k8s/api.yaml -f deploy/k8s/api-canary.yaml -f deploy/k8s/worker.yaml -f deploy/k8s/web.yaml -f deploy/k8s/pdb.yaml
       - name: Deploy canary
         if: ${{ inputs.canary }}
         env:
@@ -59,16 +66,39 @@ jobs:
         if: ${{ !inputs.canary }}
         env:
           IMAGE_TAG: ${{ inputs.image_tag || github.sha }}
+          LEGACY_SESSION_CUTOVER: ${{ inputs.legacy_session_cutover }}
         run: |
+          if [[ "$LEGACY_SESSION_CUTOVER" == "true" ]]; then
+            original_replicas="$(kubectl -n "$NAMESPACE" get deployment/agentscope-api -o jsonpath='{.spec.replicas}')"
+            original_replicas="${original_replicas:-3}"
+            kubectl -n "$NAMESPACE" scale deployment/agentscope-api --replicas=0
+            stable_pods="$(kubectl -n "$NAMESPACE" get pods -l app=agentscope-api,version=stable -o name)"
+            if [[ -n "$stable_pods" ]]; then
+              kubectl -n "$NAMESPACE" wait --for=delete pod -l app=agentscope-api,version=stable --timeout=5m
+            fi
+            kubectl -n "$NAMESPACE" set env deployment/agentscope-api SESSION_LEGACY_SESSION_PURGE=true
+          fi
           kubectl -n "$NAMESPACE" set image deployment/agentscope-api api="$REGISTRY/agentscope-api:$IMAGE_TAG"
           kubectl -n "$NAMESPACE" set image deployment/agentscope-worker worker="$REGISTRY/agentscope-worker:$IMAGE_TAG"
+          kubectl -n "$NAMESPACE" set image deployment/agentscope-web web="$REGISTRY/agentscope-web:$IMAGE_TAG"
+          if [[ "$LEGACY_SESSION_CUTOVER" == "true" ]]; then
+            kubectl -n "$NAMESPACE" scale deployment/agentscope-api --replicas="$original_replicas"
+          fi
           kubectl -n "$NAMESPACE" rollout status deployment/agentscope-api --timeout=5m
           kubectl -n "$NAMESPACE" rollout status deployment/agentscope-worker --timeout=5m
+          kubectl -n "$NAMESPACE" rollout status deployment/agentscope-web --timeout=5m
       - name: Smoke test
         if: ${{ !inputs.canary }}
         run: kubectl -n "$NAMESPACE" run release-smoke-${GITHUB_RUN_ID} --rm --restart=Never --image=curlimages/curl:8.10.1 --command -- curl --fail --max-time 10 http://agentscope-api/health/ready
       - name: Roll back on failure
         if: ${{ failure() && !inputs.canary }}
+        env:
+          LEGACY_SESSION_CUTOVER: ${{ inputs.legacy_session_cutover }}
         run: |
-          kubectl -n "$NAMESPACE" rollout undo deployment/agentscope-api
+          if [[ "$LEGACY_SESSION_CUTOVER" != "true" ]]; then
+            kubectl -n "$NAMESPACE" rollout undo deployment/agentscope-api
+          else
+            echo "Skipping API rollback to avoid restoring plaintext session storage; repair forward with an HMAC-capable API image."
+          fi
           kubectl -n "$NAMESPACE" rollout undo deployment/agentscope-worker
+          kubectl -n "$NAMESPACE" rollout undo deployment/agentscope-web

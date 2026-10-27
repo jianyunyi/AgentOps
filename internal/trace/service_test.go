@@ -206,3 +206,20 @@ func TestIngestReturnsIdempotentResultForDuplicateEvent(t *testing.T) {
 		t.Fatal("duplicate event must not create new rows")
 	}
 }
+
+func TestIngestRejectsExistingTraceOwnedByAnotherAgent(t *testing.T) {
+	repo := &fakeTraceRepository{
+		eventIDs: map[string]bool{},
+		traces:   []*Trace{{ID: "trc_existing", TenantID: "tenant_001", AgentID: "agent_owner", TraceID: "trace_shared", Status: TraceRunning}},
+	}
+	svc := NewService(repo)
+	_, err := svc.Ingest(context.Background(), IngestContext{TenantID: "tenant_001", AgentID: "agent_other"}, Event{
+		EventID: "evt_cross_agent", TraceID: "trace_shared", SpanID: "span_cross_agent", EventType: EventToolCall, OccurredAt: time.Now().UTC(),
+	})
+	if !errors.Is(err, ErrTraceAgentMismatch) {
+		t.Fatalf("error = %v, want ErrTraceAgentMismatch", err)
+	}
+	if len(repo.spans) != 0 {
+		t.Fatal("cross-agent event must not create a span")
+	}
+}

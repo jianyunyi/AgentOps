@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -32,6 +32,27 @@ describe("TraceDetailPage", () => {
     expect(await screen.findByRole("heading", { name: "Trace trace-1" })).toBeInTheDocument();
     expect(listRiskEvents).not.toHaveBeenCalled();
     expect(screen.queryByRole("complementary", { name: "Risk evidence" })).not.toBeInTheDocument();
+  });
+
+  it("opens the full root-first execution chain from the side icon", async () => {
+    getTrace.mockResolvedValue({ ...trace, spans: [
+      { spanId: "tool", parentSpanId: "llm", spanType: "tool_call", name: "tool_call", status: "success", sequence: 3, inputSnapshot: { function: "secret_function_name" }, durationMs: 12, startedAt: "2026-10-26T10:00:03Z" },
+      { spanId: "llm", parentSpanId: "root", spanType: "llm_call", name: "llm_call", status: "success", sequence: 2, durationMs: 50, startedAt: "2026-10-26T10:00:02Z" },
+      { spanId: "root", parentSpanId: null, spanType: "trace_start", name: "trace_start", status: "success", sequence: 1, durationMs: 0, startedAt: "2026-10-26T10:00:01Z" },
+    ] });
+
+    render(<TraceDetailPage />);
+    await userEvent.click(await screen.findByRole("button", { name: "Open full execution trace" }));
+
+    const dialog = await screen.findByRole("dialog", { name: "Full execution chain" });
+    expect(dialog).toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: "Close" })).toHaveFocus();
+    expect(within(dialog).getByText("trace_start → llm_call → tool_call")).toBeInTheDocument();
+    expect(screen.queryByText(/secret_function_name/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Input payload/)).not.toBeInTheDocument();
+    await userEvent.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog", { name: "Full execution chain" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Open full execution trace" })).toHaveFocus();
   });
 
   it("keeps the timeline visible when risk evidence fails and retries only that request", async () => {

@@ -1,6 +1,7 @@
 package database
 
 import (
+	"database/sql"
 	"fmt"
 
 	"agentscope/internal/agent"
@@ -20,6 +21,15 @@ type migration struct {
 	Apply   func(*gorm.DB) error
 }
 
+type MigrateOptions struct {
+	PurgeLegacySessions bool
+}
+
+const (
+	migrationLockName        = "agentops_schema_migrations"
+	migrationLockWaitSeconds = 60
+)
+
 var migrations = []migration{
 	{Version: 1, Name: "initial_schema", Apply: migrateInitialSchema},
 	{Version: 2, Name: "p0_consistency_and_credentials", Apply: migrateP0Schema},
@@ -28,30 +38,63 @@ var migrations = []migration{
 	{Version: 5, Name: "agent_signing_secret", Apply: migrateAgentSigningSecret},
 }
 
-// Migrate applies each schema version exactly once. Production deployments can
-// invoke the same function as a dedicated migration job before the new binary.
+// Migrate applies each schema version exactly once. A MySQL named lock serializes
+// startup migrations across API replicas while staying pinned to one connection.
 func Migrate(db *gorm.DB) error {
-	if err := db.Exec(`CREATE TABLE IF NOT EXISTS schema_migrations (version BIGINT PRIMARY KEY, name VARCHAR(128) NOT NULL, applied_at DATETIME(6) NOT NULL)`).Error; err != nil {
-		return fmt.Errorf("create schema_migrations: %w", err)
-	}
-	for _, item := range migrations {
-		var count int64
-		if err := db.Table("schema_migrations").Where("version = ?", item.Version).Count(&count).Error; err != nil {
-			return fmt.Errorf("check migration %d: %w", item.Version, err)
+	return MigrateWithOptions(db, MigrateOptions{})
+}
+
+func MigrateWithOptions(db *gorm.DB, options MigrateOptions) error {
+	// Use fresh GORM statements for this pinned connection. Reusing the root
+	// Statement lets Table("schema_migrations") leak into later AutoMigrate calls.
+	return db.Session(&gorm.Session{NewDB: true}).Connection(func(conn *gorm.DB) (migrationErr error) {
+		conn = conn.Session(&gorm.Session{NewDB: true})
+		var acquired sql.NullInt64
+		if err := conn.Raw("SELECT GET_LOCK(?, ?)", migrationLockName, migrationLockWaitSeconds).Row().Scan(&acquired); err != nil {
+			return fmt.Errorf("acquire schema migration lock: %w", err)
 		}
-		if count > 0 {
-			continue
+		if !acquired.Valid || acquired.Int64 != 1 {
+			return fmt.Errorf("acquire schema migration lock: timed out after %d seconds", migrationLockWaitSeconds)
 		}
-		if err := db.Transaction(func(tx *gorm.DB) error {
-			if err := item.Apply(tx); err != nil {
-				return fmt.Errorf("apply migration %d (%s): %w", item.Version, item.Name, err)
+		defer func() {
+			var released sql.NullInt64
+			if err := conn.Raw("SELECT RELEASE_LOCK(?)", migrationLockName).Row().Scan(&released); err != nil {
+				migrationErr = fmt.Errorf("release schema migration lock: %w (migration result: %v)", err, migrationErr)
+				return
 			}
-			return tx.Exec("INSERT INTO schema_migrations (version, name, applied_at) VALUES (?, ?, UTC_TIMESTAMP(6))", item.Version, item.Name).Error
-		}); err != nil {
-			return err
+			if !released.Valid || released.Int64 != 1 {
+				migrationErr = fmt.Errorf("release schema migration lock: lock was not owned (migration result: %v)", migrationErr)
+			}
+		}()
+
+		if err := conn.Exec(`CREATE TABLE IF NOT EXISTS schema_migrations (version BIGINT PRIMARY KEY, name VARCHAR(128) NOT NULL, applied_at DATETIME(6) NOT NULL)`).Error; err != nil {
+			return fmt.Errorf("create schema_migrations: %w", err)
 		}
-	}
-	return nil
+		for _, item := range migrations {
+			var count int64
+			if err := conn.Table("schema_migrations").Where("version = ?", item.Version).Count(&count).Error; err != nil {
+				return fmt.Errorf("check migration %d: %w", item.Version, err)
+			}
+			if count > 0 {
+				continue
+			}
+			if err := conn.Transaction(func(tx *gorm.DB) error {
+				if err := item.Apply(tx); err != nil {
+					return fmt.Errorf("apply migration %d (%s): %w", item.Version, item.Name, err)
+				}
+				return tx.Exec("INSERT INTO schema_migrations (version, name, applied_at) VALUES (?, ?, UTC_TIMESTAMP(6))", item.Version, item.Name).Error
+			}); err != nil {
+				return err
+			}
+		}
+		if options.PurgeLegacySessions {
+			result := conn.Model(&auth.Session{}).Where("LEFT(id, 4) = ?", "ses_").Delete(&auth.Session{})
+			if result.Error != nil {
+				return fmt.Errorf("purge legacy plaintext sessions: %w", result.Error)
+			}
+		}
+		return nil
+	})
 }
 
 func migrateInitialSchema(db *gorm.DB) error {

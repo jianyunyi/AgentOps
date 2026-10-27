@@ -1,16 +1,29 @@
 import type { Paginated, Span, TraceDetail, TraceSummary } from "./types";
 
+declare global {
+  interface Window {
+    __AGENTOPS_RUNTIME_CONFIG__?: { apiBaseUrl?: string };
+  }
+}
+
 export class APIError extends Error {
   constructor(public readonly code: string, message: string, public readonly status: number) {
     super(message);
   }
 }
 
+function apiUrl(path: string): string {
+  const base = typeof window === "undefined"
+    ? ""
+    : window.__AGENTOPS_RUNTIME_CONFIG__?.apiBaseUrl?.trim() ?? "";
+  return base ? `${base.replace(/\/$/, "")}/${path.replace(/^\//, "")}` : path;
+}
+
 export async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const headers = new Headers(init?.headers);
   const csrf = typeof document === "undefined" ? "" : document.cookie.split(";").map((item) => item.trim()).find((item) => item.startsWith("agentscope_csrf="))?.split("=")[1] ?? "";
   if (csrf && init?.method && init.method !== "GET") headers.set("X-CSRF-Token", decodeURIComponent(csrf));
-  const response = await fetch(path, { ...init, headers, credentials: "include" });
+  const response = await fetch(apiUrl(path), { ...init, headers, credentials: "include" });
   if (response.status === 204) return undefined as T;
   const raw = await response.text();
   const body = (raw ? JSON.parse(raw) : {}) as { data?: T; error?: { code: string; message: string } };

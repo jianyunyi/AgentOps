@@ -25,3 +25,19 @@ func TestParseConfigRejectsUnsafeInput(t *testing.T) {
 		}
 	}
 }
+
+func TestParseConfigValidatesRedisSecuritySettings(t *testing.T) {
+	config, err := ParseConfig(strings.NewReader("REDIS_ADDR=cache.example.com:6380\nREDIS_PASSWORD=secret\nREDIS_TLS_ENABLED=true\n"), false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if config.Values["REDIS_TLS_SERVER_NAME"] != "cache.example.com" {
+		t.Fatalf("Redis TLS name = %q", config.Values["REDIS_TLS_SERVER_NAME"])
+	}
+
+	for _, input := range []string{"REDIS_USERNAME=cache-user\n", "REDIS_TLS_ENABLED=maybe\n", "REDIS_TLS_ENABLED=true\nREDIS_ADDR=redis\n"} {
+		if _, err := ParseConfig(strings.NewReader(input), false); err == nil {
+			t.Fatalf("accepted invalid Redis configuration %q", input)
+		}
+	}
+}

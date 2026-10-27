@@ -33,7 +33,7 @@ func TestMySQLRecovery(t *testing.T) {
 	defer exec.Command("docker", "rm", "-f", name).Run()
 	deadline := time.Now().Add(2 * time.Minute)
 	for {
-		err := exec.Command("docker", "exec", name, "sh", "-c", `MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql -uroot -e 'SELECT 1'`).Run()
+		err := exec.Command("docker", "exec", name, "sh", "-c", `MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql --protocol=TCP -h 127.0.0.1 -uroot -e 'SELECT 1'`).Run()
 		if err == nil {
 			break
 		}
@@ -52,9 +52,9 @@ func TestMySQLRecovery(t *testing.T) {
 	a, _ := cipher.NewGCM(block)
 	nonce := make([]byte, a.NonceSize())
 	encrypted := base64.StdEncoding.EncodeToString(a.Seal(nonce, nonce, []byte("original-agent-signing-secret"), nil))
-	docker("exec", name, "sh", "-c", `MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql -uroot -e "CREATE DATABASE restored; CREATE TABLE agentscope.credentials (id INT PRIMARY KEY, secret TEXT); INSERT INTO agentscope.credentials VALUES (1,'`+encrypted+`'); CREATE TABLE agentscope.events (id INT PRIMARY KEY, payload TEXT); INSERT INTO agentscope.events VALUES (7,'event-payload');"`)
+	docker("exec", name, "sh", "-c", `MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql --protocol=TCP -h 127.0.0.1 -uroot -e "CREATE DATABASE restored; CREATE TABLE agentscope.credentials (id INT PRIMARY KEY, secret TEXT); INSERT INTO agentscope.credentials VALUES (1,'`+encrypted+`'); CREATE TABLE agentscope.events (id INT PRIMARY KEY, payload TEXT); INSERT INTO agentscope.events VALUES (7,'event-payload');"`)
 	path, err := SaveBackup(t.TempDir(), "integration-backup-password", config, func(w io.Writer) error {
-		cmd := exec.Command("docker", "exec", name, "sh", "-c", `MYSQL_PWD="$MYSQL_PASSWORD" exec mysqldump --single-transaction --quick --no-tablespaces --set-gtid-purged=OFF --hex-blob -u agentscope agentscope`)
+		cmd := exec.Command("docker", "exec", name, "sh", "-c", `MYSQL_PWD="$MYSQL_PASSWORD" exec mysqldump --protocol=TCP -h 127.0.0.1 --single-transaction --quick --no-tablespaces --set-gtid-purged=OFF --hex-blob -u agentscope agentscope`)
 		cmd.Stdout = w
 		return cmd.Run()
 	})
@@ -65,12 +65,12 @@ func TestMySQLRecovery(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cmd := exec.Command("docker", "exec", "-i", name, "sh", "-c", `MYSQL_PWD="$MYSQL_ROOT_PASSWORD" exec mysql -uroot restored`)
+	cmd := exec.Command("docker", "exec", "-i", name, "sh", "-c", `MYSQL_PWD="$MYSQL_ROOT_PASSWORD" exec mysql --protocol=TCP -h 127.0.0.1 -uroot restored`)
 	cmd.Stdin = bytes.NewReader(sql)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("import: %v %s", err, out)
 	}
-	out := docker("exec", name, "sh", "-c", `MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql -N -B -uroot restored -e 'SELECT secret FROM credentials WHERE id=1; SELECT payload FROM events WHERE id=7'`)
+	out := docker("exec", name, "sh", "-c", `MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql --protocol=TCP -h 127.0.0.1 -N -B -uroot restored -e 'SELECT secret FROM credentials WHERE id=1; SELECT payload FROM events WHERE id=7'`)
 	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
 	if len(lines) != 2 || lines[1] != "event-payload" {
 		t.Fatalf("restored rows differ: %q", out)
